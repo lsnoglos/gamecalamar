@@ -25,6 +25,7 @@ export class PlayerManager {
       bounce: 0,
       velocityY: 0,
       pendingImpulses: [],
+      explosionParticles: [],
     };
     this.players.set(id, player);
     return player;
@@ -58,6 +59,7 @@ export class PlayerManager {
     if (!p || p.state !== "alive") return null;
     p.state = "eliminated";
     p.eliminatedAt = now;
+    p.explosionParticles = createExplosionParticles();
     return p;
   }
 
@@ -103,6 +105,16 @@ export class PlayerManager {
 
       if (p.state === "eliminated" && now - p.eliminatedAt > CONFIG.player.eliminationFadeMs) {
         this.players.delete(id);
+      }
+
+      if (p.state === "eliminated" && p.explosionParticles.length > 0) {
+        const t = (now - p.eliminatedAt) / CONFIG.player.eliminationFadeMs;
+        for (const particle of p.explosionParticles) {
+          particle.x += particle.vx;
+          particle.y += particle.vy;
+          particle.vy += 0.02;
+          particle.life = Math.max(0, 1 - t);
+        }
       }
     }
   }
@@ -158,4 +170,20 @@ function randomPaletteColor() {
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
+}
+
+function createExplosionParticles() {
+  const amount = 16;
+  return Array.from({ length: amount }, (_, index) => {
+    const angle = (Math.PI * 2 * index) / amount + Math.random() * 0.35;
+    const speed = 1.4 + Math.random() * 2.2;
+    return {
+      x: 0,
+      y: 0,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.8,
+      size: 2 + Math.random() * 3.5,
+      life: 1,
+    };
+  });
 }

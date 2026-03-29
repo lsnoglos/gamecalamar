@@ -299,6 +299,20 @@ export class GameController {
     ctx.closePath();
     ctx.fill();
 
+    ctx.fillStyle = "#8f5e3e";
+    ctx.fillRect(457, 220, 20, 28);
+    ctx.fillStyle = "#d4ecff";
+    ctx.fillRect(486, 196, 18, 16);
+    ctx.strokeStyle = "#84644f";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(486, 196, 18, 16);
+    ctx.beginPath();
+    ctx.moveTo(495, 196);
+    ctx.lineTo(495, 212);
+    ctx.moveTo(486, 204);
+    ctx.lineTo(504, 204);
+    ctx.stroke();
+
     ctx.fillStyle = "#d7bf7a";
     ctx.fillRect(0, 250, this.canvas.width, this.canvas.height - 250);
     for (let y = 252; y < this.canvas.height; y += 14) {
@@ -387,12 +401,12 @@ export class GameController {
 
     const drawPigtail = (side) => {
       const sx = side * 28;
-      ctx.fillStyle = "#29a8ff";
+      ctx.fillStyle = "#161616";
       ctx.beginPath();
       ctx.ellipse(sx, -6, 12, 16, side * 0.42, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = "#1488d9";
+      ctx.strokeStyle = "#2f2f2f";
       ctx.lineWidth = 2.3;
       ctx.beginPath();
       ctx.ellipse(sx, -6, 8, 11, side * 0.42, 0, Math.PI * 2);
@@ -418,16 +432,43 @@ export class GameController {
     ctx.arc(0, 0, 24, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#fff";
+    const firingLaser = this.doll.isScanning() && frontVisible > 0.35;
+    ctx.fillStyle = firingLaser ? "#ffd1d1" : "#fff";
     ctx.beginPath();
     ctx.arc(-8, -2, 5.3, 0, Math.PI * 2);
     ctx.arc(8, -2, 5.3, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#111";
+    ctx.fillStyle = firingLaser ? "#8b0000" : "#111";
     ctx.beginPath();
     ctx.arc(-8, -2, 2.7, 0, Math.PI * 2);
     ctx.arc(8, -2, 2.7, 0, Math.PI * 2);
     ctx.fill();
+    if (firingLaser) {
+      const pulse = 0.75 + Math.sin(now * 0.05) * 0.25;
+      const beamLen = 920;
+      for (const eyeX of [-8, 8]) {
+        ctx.fillStyle = `rgba(255,20,20,${0.25 + 0.2 * pulse})`;
+        ctx.beginPath();
+        ctx.moveTo(eyeX - 2, 0);
+        ctx.lineTo(eyeX + 2, 0);
+        ctx.lineTo(eyeX + 18, beamLen);
+        ctx.lineTo(eyeX - 18, beamLen);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = `rgba(255,110,110,${0.6 + 0.3 * pulse})`;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(eyeX, 0);
+        ctx.lineTo(eyeX + 1.5, beamLen);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(255,0,0,0.9)";
+        ctx.beginPath();
+        ctx.arc(eyeX, -2, 3.6 + pulse * 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
 
     ctx.strokeStyle = "#8f5a4b";
     ctx.lineWidth = 2;
@@ -480,6 +521,16 @@ export class GameController {
         ctx.beginPath();
         ctx.rect(-15, 20 - clipHeight, 30, clipHeight + 18);
         ctx.clip();
+      }
+
+      if (p.state === "eliminated" && p.explosionParticles.length > 0) {
+        for (const particle of p.explosionParticles) {
+          if (particle.life <= 0) continue;
+          ctx.fillStyle = `rgba(255,${120 + Math.floor(Math.random() * 80)},30,${particle.life})`;
+          ctx.beginPath();
+          ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       const bodyColor = p.state === "eliminated" ? "#ff3b3b" : p.color;
