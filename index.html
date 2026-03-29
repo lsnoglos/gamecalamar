@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Luz Roja, Luz Verde - Arcade Vertical</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell" id="app-shell">
+      <header class="hud-top">
+        <div class="hud-block">
+          <span class="hud-label">Tiempo</span>
+          <strong id="time-left">90</strong>
+        </div>
+        <div class="hud-block state" id="game-state" data-state="safe">SAFE</div>
+        <div class="hud-block">
+          <span class="hud-label">Jugando</span>
+          <strong id="alive-count">0</strong>
+        </div>
+      </header>
+
+      <aside class="hud-ranking">
+        <h2>TOP 3</h2>
+        <ol id="ranking-list">
+          <li>—</li>
+          <li>—</li>
+          <li>—</li>
+        </ol>
+      </aside>
+
+      <main class="game-viewport">
+        <canvas id="game-canvas" width="540" height="960"></canvas>
+        <div class="flash" id="flash-overlay"></div>
+        <div class="comment-zone">Espacio libre para comentarios / overlays</div>
+      </main>
+
+      <footer class="control-panel">
+        <button id="spawn-btn">Enviar 🌹 (nuevo jugador)</button>
+        <button id="tap-btn">Tap global</button>
+        <button id="auto-tap-btn">Auto Tap: OFF</button>
+      </footer>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
