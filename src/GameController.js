@@ -254,7 +254,10 @@ export class GameController {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.canvas.width, 320);
 
-    ctx.fillStyle = "rgba(0,0,0,0.17)";
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+
+    ctx.fillStyle = "rgba(63, 48, 36, 0.32)";
     ctx.beginPath();
     ctx.ellipse(270, 245, 102, 24, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -267,13 +270,13 @@ export class GameController {
     trunk.bezierCurveTo(308, 182, 318, 214, 300, 250);
     trunk.closePath();
     const trunkPaint = ctx.createLinearGradient(232, 74, 302, 250);
-    trunkPaint.addColorStop(0, "#2b1b13");
-    trunkPaint.addColorStop(0.45, "#4a3124");
-    trunkPaint.addColorStop(1, "#24160f");
+    trunkPaint.addColorStop(0, "#86624c");
+    trunkPaint.addColorStop(0.45, "#a0785b");
+    trunkPaint.addColorStop(1, "#755744");
     ctx.fillStyle = trunkPaint;
     ctx.fill(trunk);
 
-    ctx.strokeStyle = "#2f1f16";
+    ctx.strokeStyle = "#785843";
     ctx.lineWidth = 11;
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -284,6 +287,7 @@ export class GameController {
     ctx.moveTo(264, 128);
     ctx.quadraticCurveTo(220, 120, 176, 100);
     ctx.stroke();
+    ctx.restore();
 
     ctx.fillStyle = "#f9f9f2";
     ctx.fillRect(420, 176, 92, 72);
@@ -380,6 +384,22 @@ export class GameController {
     ctx.beginPath();
     ctx.arc(0, 0, 30, 0, Math.PI * 2);
     ctx.fill();
+
+    const drawPigtail = (side) => {
+      const sx = side * 28;
+      ctx.fillStyle = "#29a8ff";
+      ctx.beginPath();
+      ctx.ellipse(sx, -6, 12, 16, side * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "#1488d9";
+      ctx.lineWidth = 2.3;
+      ctx.beginPath();
+      ctx.ellipse(sx, -6, 8, 11, side * 0.42, 0, Math.PI * 2);
+      ctx.stroke();
+    };
+    drawPigtail(-1);
+    drawPigtail(1);
 
     ctx.globalAlpha = backVisible;
     ctx.fillStyle = "#1b120e";
