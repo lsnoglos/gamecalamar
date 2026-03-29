@@ -23,6 +23,8 @@ export class PlayerManager {
       rankAnimStartAt: 0,
       rankFrom: null,
       bounce: 0,
+      velocityY: 0,
+      pendingImpulses: [],
     };
     this.players.set(id, player);
     return player;
@@ -31,10 +33,10 @@ export class PlayerManager {
   applyTap(id, now, isDanger) {
     const p = this.players.get(id);
     if (!p || p.state !== "alive") return false;
-    p.y -= CONFIG.player.speedPerTap;
-    p.lastMoveAt = now;
-    p.bounce = 1;
-    if (isDanger) p.movedInDanger = true;
+    p.pendingImpulses.push({
+      dueAt: now + CONFIG.player.tapDelayMs,
+      danger: isDanger,
+    });
     return true;
   }
 
@@ -42,10 +44,10 @@ export class PlayerManager {
     let moved = false;
     for (const p of this.players.values()) {
       if (p.state !== "alive") continue;
-      p.y -= CONFIG.player.speedPerTap;
-      p.lastMoveAt = now;
-      p.bounce = 1;
-      if (isDanger) p.movedInDanger = true;
+      p.pendingImpulses.push({
+        dueAt: now + CONFIG.player.tapDelayMs,
+        danger: isDanger,
+      });
       moved = true;
     }
     return moved;
@@ -72,6 +74,19 @@ export class PlayerManager {
   update(now) {
     for (const [id, p] of this.players.entries()) {
       if (p.bounce > 0) p.bounce = Math.max(0, p.bounce - 0.08);
+      while (p.pendingImpulses.length > 0 && p.pendingImpulses[0].dueAt <= now) {
+        const impulse = p.pendingImpulses.shift();
+        p.velocityY += CONFIG.player.speedPerTap;
+        p.lastMoveAt = now;
+        p.bounce = 1;
+        if (impulse?.danger) p.movedInDanger = true;
+      }
+
+      if (p.velocityY > 0) {
+        p.y -= p.velocityY;
+        p.velocityY *= CONFIG.player.speedDamping;
+        if (p.velocityY < 0.02) p.velocityY = 0;
+      }
 
       if (p.state === "winner") {
         const t = Math.min(1, (now - p.rankAnimStartAt) / CONFIG.player.rankTravelMs);
@@ -94,6 +109,8 @@ export class PlayerManager {
       if (p.state === "alive") {
         p.y = randomInRange(CONFIG.player.spawnMinY, CONFIG.player.spawnMaxY);
         p.movedInDanger = false;
+        p.velocityY = 0;
+        p.pendingImpulses = [];
       }
     }
   }

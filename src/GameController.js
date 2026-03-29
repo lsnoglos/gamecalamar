@@ -30,7 +30,9 @@ export class GameController {
     this.extraTimeUsed = false;
     this.autoTap = false;
     this.nextAutoTapAt = performance.now();
-    this.autoTapInterval = 160;
+    this.autoTapInterval = 240;
+    this.dangerSinceAt = 0;
+    this.aggressiveScan = false;
 
     this.bridge = new EventBridge({
       onRoseGift: (username) => this.spawnPlayer(username),
@@ -74,7 +76,11 @@ export class GameController {
 
     if (this.players.applyGlobalTap(now, isDanger)) {
       this.sounds.playStep();
-      this.uiManager.announce("Corre… ahora…", "neutral");
+      if (isDanger) {
+        this.uiManager.setContextMessage("¡No te muevas!");
+      } else {
+        this.uiManager.setContextMessage(Math.random() > 0.5 ? "Corre… ahora…" : "Avanza rápido");
+      }
     }
   }
 
@@ -95,19 +101,39 @@ export class GameController {
     if (stateEvent === "turn") {
       this.sounds.playTurn();
       this.uiManager.triggerTurnFX();
-      this.uiManager.announce("La muñeca te está mirando 👁️", "danger");
+      this.uiManager.announce("¡Se está volteando!", "danger");
+      this.uiManager.setContextMessage("¡Se está volteando!");
     }
 
     if (stateEvent === "danger") {
       this.sounds.playScan();
+      this.dangerSinceAt = now;
+      this.aggressiveScan = false;
+      this.uiManager.setContextMessage("¡No te muevas!");
+      this.uiManager.announce("La muñeca te está viendo 👁️", "danger");
     }
 
     if (stateEvent === "safe") {
       this.sounds.playIdle();
-      this.uiManager.announce("No te muevas…", "ok");
+      this.uiManager.announce("Corre… ahora…", "ok");
+      this.uiManager.setContextMessage(Math.random() > 0.5 ? "Corre… ahora…" : "Avanza rápido");
+      this.aggressiveScan = false;
+      this.uiManager.setDangerMode(false);
     }
 
-    this.vision.update(now);
+    if (this.doll.isScanning()) {
+      const scanningFor = now - this.dangerSinceAt;
+      this.aggressiveScan = scanningFor >= CONFIG.game.cone.aggressiveAfterMs;
+      if (this.aggressiveScan) {
+        this.uiManager.setContextMessage("¡Te está buscando!");
+      }
+      this.uiManager.setDangerMode(true);
+    }
+
+    this.vision.update(now, {
+      scanning: this.doll.isScanning(),
+      aggressive: this.aggressiveScan,
+    });
 
     if (this.doll.isScanning()) {
       this.#scanAndEliminate(now);
@@ -147,6 +173,7 @@ export class GameController {
   #checkGoal(now) {
     for (const p of this.players.getAlive()) {
       if (p.y > CONFIG.game.finishLineY) continue;
+      if (p.y > CONFIG.game.finishLineY - CONFIG.game.finishWindow) continue;
       const registered = this.ranking.registerWinner(p);
       if (!registered) continue;
 
@@ -154,6 +181,7 @@ export class GameController {
       this.sounds.playVictory();
       this.uiManager.floatingText(`¡${p.username} llegó a la meta!`, p.x, p.y - 24, "victory");
       this.uiManager.announce(`¡${p.username} llegó a la meta!`, "ok");
+      this.uiManager.triggerTurnFX();
       this.chat.sendChatMessage(`${p.username} llegó a la meta 🏁 ${registered.place}er lugar`);
     }
   }
@@ -216,19 +244,36 @@ export class GameController {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.canvas.width, 320);
 
-    ctx.fillStyle = "#3d2f29";
+    ctx.fillStyle = "rgba(0,0,0,0.17)";
     ctx.beginPath();
-    ctx.ellipse(270, 212, 34, 172, -0.14, 0, Math.PI * 2);
+    ctx.ellipse(270, 245, 102, 24, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = "#2b201d";
-    ctx.lineWidth = 6;
-    for (let i = 0; i < 8; i += 1) {
-      ctx.beginPath();
-      ctx.moveTo(262 + i * 3, 102 + i * 3);
-      ctx.lineTo(162 + i * 24, 26 + i * 4);
-      ctx.stroke();
-    }
+    const trunk = new Path2D();
+    trunk.moveTo(240, 250);
+    trunk.bezierCurveTo(220, 210, 228, 170, 246, 132);
+    trunk.bezierCurveTo(257, 112, 254, 90, 268, 72);
+    trunk.bezierCurveTo(284, 94, 286, 120, 296, 146);
+    trunk.bezierCurveTo(308, 182, 318, 214, 300, 250);
+    trunk.closePath();
+    const trunkPaint = ctx.createLinearGradient(232, 74, 302, 250);
+    trunkPaint.addColorStop(0, "#2b1b13");
+    trunkPaint.addColorStop(0.45, "#4a3124");
+    trunkPaint.addColorStop(1, "#24160f");
+    ctx.fillStyle = trunkPaint;
+    ctx.fill(trunk);
+
+    ctx.strokeStyle = "#2f1f16";
+    ctx.lineWidth = 11;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(268, 104);
+    ctx.quadraticCurveTo(210, 78, 156, 46);
+    ctx.moveTo(273, 98);
+    ctx.quadraticCurveTo(330, 78, 386, 48);
+    ctx.moveTo(264, 128);
+    ctx.quadraticCurveTo(220, 120, 176, 100);
+    ctx.stroke();
 
     ctx.fillStyle = "#f9f9f2";
     ctx.fillRect(420, 176, 92, 72);
@@ -250,13 +295,13 @@ export class GameController {
       }
     }
 
-    ctx.fillStyle = "rgba(255,255,255,0.78)";
-    ctx.fillRect(0, CONFIG.game.finishLineY, this.canvas.width, 7);
+    ctx.fillStyle = "rgba(255,255,255,0.82)";
+    ctx.fillRect(0, CONFIG.game.finishLineY, this.canvas.width, 4);
     ctx.strokeStyle = "rgba(20,20,20,0.55)";
-    ctx.setLineDash([10, 6]);
+    ctx.setLineDash([8, 7]);
     ctx.beginPath();
-    ctx.moveTo(0, CONFIG.game.finishLineY + 7);
-    ctx.lineTo(this.canvas.width, CONFIG.game.finishLineY + 7);
+    ctx.moveTo(0, CONFIG.game.finishLineY + 4);
+    ctx.lineTo(this.canvas.width, CONFIG.game.finishLineY + 4);
     ctx.stroke();
     ctx.setLineDash([]);
   }
@@ -290,6 +335,8 @@ export class GameController {
     const bob = this.doll.state === "safe" ? Math.sin(now * 0.006) * 1.4 : 0;
     const turnP = this.doll.turnProgress(now);
     const headRotation = this.doll.state === "turn" ? Math.PI - turnP * Math.PI : this.doll.state === "safe" ? Math.PI : 0;
+    const frontVisible = Math.max(0, Math.cos(headRotation));
+    const backVisible = 1 - frontVisible;
 
     ctx.save();
     ctx.translate(x, y + bob);
@@ -324,21 +371,21 @@ export class GameController {
     ctx.arc(0, 0, 30, 0, Math.PI * 2);
     ctx.fill();
 
+    ctx.globalAlpha = backVisible;
+    ctx.fillStyle = "#1b120e";
+    ctx.beginPath();
+    ctx.ellipse(-15, -2, 10, 20, -0.25, 0, Math.PI * 2);
+    ctx.ellipse(15, -2, 10, 20, 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#211610";
+    ctx.beginPath();
+    ctx.arc(0, -3, 26, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = frontVisible;
     ctx.fillStyle = "#f6d9ba";
     ctx.beginPath();
     ctx.arc(0, 0, 24, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#2f231d";
-    ctx.beginPath();
-    ctx.arc(-24, -4, 9, 0, Math.PI * 2);
-    ctx.arc(24, -4, 9, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#f6d9ba";
-    ctx.beginPath();
-    ctx.arc(-24, -4, 5, 0, Math.PI * 2);
-    ctx.arc(24, -4, 5, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "#fff";
@@ -358,6 +405,7 @@ export class GameController {
     ctx.moveTo(-6, 10);
     ctx.quadraticCurveTo(0, 13, 6, 10);
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
     ctx.restore();
     ctx.restore();
@@ -369,8 +417,8 @@ export class GameController {
     ctx.fillStyle = "rgba(0,0,0,0.14)";
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-    const glow = ctx.createRadialGradient(cone.origin.x, cone.origin.y, 40, cone.origin.x, cone.origin.y, cone.radius);
-    glow.addColorStop(0, "rgba(255,60,60,0.34)");
+    const glow = ctx.createRadialGradient(cone.origin.x, cone.origin.y, 36, cone.origin.x, cone.origin.y, cone.radius);
+    glow.addColorStop(0, this.aggressiveScan ? "rgba(255,50,50,0.5)" : "rgba(255,60,60,0.34)");
     glow.addColorStop(1, "rgba(255,60,60,0.02)");
 
     ctx.beginPath();
@@ -381,8 +429,8 @@ export class GameController {
     ctx.fillStyle = glow;
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(255,128,128,0.8)";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = this.aggressiveScan ? "rgba(255,176,176,0.95)" : "rgba(255,128,128,0.8)";
+    ctx.lineWidth = this.aggressiveScan ? 3 : 2;
     ctx.stroke();
   }
 

@@ -1,17 +1,9 @@
 import { CONFIG } from "./config.js";
 
-const ROTATING_MESSAGES = [
-  "No te muevas…",
-  "La muñeca te está mirando 👁️",
-  "Corre… ahora…",
-  "¿Te salvarás?",
-];
-
 export class UIManager {
   constructor(ui) {
     this.ui = ui;
-    this.currentMessageIdx = 0;
-    this.lastRotateAt = 0;
+    this.lastBottomMessage = "";
   }
 
   updateHud({ timeLeft, aliveCount, gameState, ranking, level }) {
@@ -27,11 +19,14 @@ export class UIManager {
     }
   }
 
-  rotateBottomMessage(now) {
-    if (now - this.lastRotateAt < CONFIG.ui.messageRotateMs) return;
-    this.lastRotateAt = now;
-    this.currentMessageIdx = (this.currentMessageIdx + 1) % ROTATING_MESSAGES.length;
-    this.ui.gameMessage.textContent = ROTATING_MESSAGES[this.currentMessageIdx];
+  rotateBottomMessage() {
+    // Se conserva por compatibilidad. Ahora los mensajes se sincronizan por estado real.
+  }
+
+  setContextMessage(message) {
+    if (!message || message === this.lastBottomMessage) return;
+    this.lastBottomMessage = message;
+    this.ui.gameMessage.textContent = message;
   }
 
   announce(message, tone = "neutral") {
@@ -66,6 +61,15 @@ export class UIManager {
       ],
       { duration: 170, iterations: 2 },
     );
+
+    this.ui.shell.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(1.015)" }, { transform: "scale(1)" }],
+      { duration: 260, easing: "ease-out" },
+    );
+  }
+
+  setDangerMode(enabled) {
+    this.ui.shell.classList.toggle("danger-mode", enabled);
   }
 }
 
