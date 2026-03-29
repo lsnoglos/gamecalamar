@@ -1,6 +1,7 @@
 import { CONFIG } from "./config.js";
 import { PlayerManager } from "./PlayerManager.js";
 import { DollAI } from "./DollAI.js";
+import { VisionSystem } from "./VisionSystem.js";
 import { RankingSystem } from "./RankingSystem.js";
 import { EventBridge } from "./EventBridge.js";
 import { SoundManager } from "./SoundManager.js";
@@ -17,6 +18,7 @@ export class GameController {
 
     this.players = new PlayerManager();
     this.doll = new DollAI();
+    this.vision = new VisionSystem();
     this.ranking = new RankingSystem();
     this.sounds = new SoundManager();
     this.uiManager = new UIManager(ui);
@@ -43,6 +45,7 @@ export class GameController {
     const now = performance.now();
     this.roundStartAt = now;
     this.doll.start(now, this.level);
+    this.vision.setLevel(this.level);
     this.sounds.playIdle();
     requestAnimationFrame((t) => this.#loop(t));
   }
@@ -71,7 +74,7 @@ export class GameController {
 
     if (this.players.applyGlobalTap(now, isDanger)) {
       this.sounds.playStep();
-      this.uiManager.announce("Dale tap tap para avanzar", "neutral");
+      this.uiManager.announce("Corre… ahora…", "neutral");
     }
   }
 
@@ -92,16 +95,22 @@ export class GameController {
     if (stateEvent === "turn") {
       this.sounds.playTurn();
       this.uiManager.triggerTurnFX();
-      this.uiManager.announce("¡No te muevas!", "danger");
+      this.uiManager.announce("La muñeca te está mirando 👁️", "danger");
     }
 
     if (stateEvent === "danger") {
-      this.#scanAndEliminate(now);
+      this.sounds.playScan();
     }
 
     if (stateEvent === "safe") {
       this.sounds.playIdle();
-      this.uiManager.announce("Luz verde: ¡corre!", "ok");
+      this.uiManager.announce("No te muevas…", "ok");
+    }
+
+    this.vision.update(now);
+
+    if (this.doll.isScanning()) {
+      this.#scanAndEliminate(now);
     }
 
     if (this.autoTap && now >= this.nextAutoTapAt) {
@@ -122,7 +131,8 @@ export class GameController {
 
   #scanAndEliminate(now) {
     for (const mover of this.players.getMoversInDanger()) {
-      if (this.doll.isInsideBeam({ x: mover.x, y: mover.y })) {
+      if (mover.y <= CONFIG.game.finishLineY) continue;
+      if (this.vision.isPointInside({ x: mover.x, y: mover.y })) {
         const eliminated = this.players.eliminatePlayer(mover.id, now);
         if (eliminated) {
           this.sounds.playElimination();
@@ -174,6 +184,7 @@ export class GameController {
     this.roundDurationMs = CONFIG.game.roundSeconds * 1000;
     this.extraTimeUsed = false;
     this.doll.start(now, this.level);
+    this.vision.setLevel(this.level);
   }
 
   #syncHud(now) {
@@ -192,118 +203,193 @@ export class GameController {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.#drawField(ctx);
+    if (this.doll.isScanning()) this.#drawVisionCone(ctx);
     this.#drawGuards(ctx, now);
     this.#drawDoll(ctx, now);
-    if (this.doll.state !== "safe") this.#drawBeam(ctx);
     this.#drawPlayers(ctx, now);
   }
 
   #drawField(ctx) {
-    ctx.fillStyle = "#d3b08c";
-    ctx.fillRect(0, 0, this.canvas.width, 235);
-    ctx.fillStyle = "#2f8f57";
-    ctx.fillRect(0, 235, this.canvas.width, this.canvas.height - 235);
+    const sky = ctx.createLinearGradient(0, 0, 0, 310);
+    sky.addColorStop(0, "#95d7ff");
+    sky.addColorStop(1, "#c6e7fb");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, this.canvas.width, 320);
 
-    for (let y = 236; y < this.canvas.height; y += 16) {
-      for (let x = 0; x < this.canvas.width; x += 16) {
-        ctx.fillStyle = (x / 16 + y / 16) % 2 === 0 ? "#2d854f" : "#3b9c60";
-        ctx.fillRect(x, y, 16, 16);
+    ctx.fillStyle = "#3d2f29";
+    ctx.beginPath();
+    ctx.ellipse(270, 212, 34, 172, -0.14, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#2b201d";
+    ctx.lineWidth = 6;
+    for (let i = 0; i < 8; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(262 + i * 3, 102 + i * 3);
+      ctx.lineTo(162 + i * 24, 26 + i * 4);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "#f9f9f2";
+    ctx.fillRect(420, 176, 92, 72);
+    ctx.fillStyle = "#b84a37";
+    ctx.beginPath();
+    ctx.moveTo(410, 176);
+    ctx.lineTo(466, 146);
+    ctx.lineTo(522, 176);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#d7bf7a";
+    ctx.fillRect(0, 250, this.canvas.width, this.canvas.height - 250);
+    for (let y = 252; y < this.canvas.height; y += 14) {
+      for (let x = 0; x < this.canvas.width; x += 12) {
+        const n = Math.sin(x * 0.03 + y * 0.018);
+        ctx.fillStyle = n > 0 ? "#af9d58" : "#8da063";
+        ctx.fillRect(x, y, 11, 12);
       }
     }
 
-    ctx.fillStyle = "#f5f5f5";
+    ctx.fillStyle = "rgba(255,255,255,0.78)";
     ctx.fillRect(0, CONFIG.game.finishLineY, this.canvas.width, 7);
-    ctx.fillStyle = "#f7df8d";
-    ctx.fillRect(0, CONFIG.game.startLineY, this.canvas.width, 5);
+    ctx.strokeStyle = "rgba(20,20,20,0.55)";
+    ctx.setLineDash([10, 6]);
+    ctx.beginPath();
+    ctx.moveTo(0, CONFIG.game.finishLineY + 7);
+    ctx.lineTo(this.canvas.width, CONFIG.game.finishLineY + 7);
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   #drawGuards(ctx, now) {
     const guards = [
-      { x: 125, y: 182, mask: "○" },
-      { x: 182, y: 196, mask: "△" },
-      { x: 357, y: 196, mask: "□" },
-      { x: 415, y: 182, mask: "○" },
+      { x: 136, y: 278, mask: "○" },
+      { x: 205, y: 294, mask: "△" },
+      { x: 336, y: 294, mask: "□" },
+      { x: 404, y: 278, mask: "○" },
     ];
     for (const g of guards) {
-      const breath = Math.sin(now * 0.005 + g.x) * 2;
+      const breath = Math.sin(now * 0.004 + g.x) * 1.7;
       ctx.save();
       ctx.translate(g.x, g.y + breath);
-      ctx.fillStyle = "#bd1f29";
-      ctx.fillRect(-13, -26, 26, 46);
-      ctx.fillStyle = "#111";
-      ctx.fillRect(-11, -40, 22, 18);
+      ctx.fillStyle = "#cc2d44";
+      ctx.fillRect(-11, -33, 22, 45);
+      ctx.fillStyle = "#1a1518";
+      ctx.fillRect(-10, -48, 20, 17);
       ctx.fillStyle = "#f3f3f3";
-      ctx.font = "bold 13px sans-serif";
+      ctx.font = "bold 12px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(g.mask, 0, -27);
+      ctx.fillText(g.mask, 0, -35);
       ctx.restore();
     }
   }
 
   #drawDoll(ctx, now) {
     const x = this.canvas.width / 2;
-    const y = 164;
-    const bob = Math.sin(now * 0.007) * 2;
-    const turning = this.doll.state === "turn";
+    const y = 286;
+    const bob = this.doll.state === "safe" ? Math.sin(now * 0.006) * 1.4 : 0;
+    const turnP = this.doll.turnProgress(now);
+    const headRotation = this.doll.state === "turn" ? Math.PI - turnP * Math.PI : this.doll.state === "safe" ? Math.PI : 0;
 
     ctx.save();
     ctx.translate(x, y + bob);
 
-    if (this.doll.state === "safe") {
-      ctx.fillStyle = "#432311";
-      ctx.beginPath();
-      ctx.arc(0, -12, 14, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#f2d1b1";
-      ctx.fillRect(-10, -19, 20, 24);
-    } else {
-      ctx.fillStyle = "#f2d1b1";
-      ctx.fillRect(-10, -19, 20, 24);
-      ctx.fillStyle = "#3f2412";
-      ctx.fillRect(-11, -25, 22, 8);
-      ctx.fillStyle = "#000";
-      ctx.beginPath();
-      ctx.arc(-4, -8, 2.2, 0, Math.PI * 2);
-      ctx.arc(4, -8, 2.2, 0, Math.PI * 2);
-      ctx.fill();
+    ctx.fillStyle = "#f6d9ba";
+    ctx.fillRect(-20, -46, 40, 20);
 
-      if (this.doll.state === "danger") {
-        ctx.strokeStyle = "rgba(255,80,80,0.9)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, -8);
-        ctx.lineTo(0, 700);
-        ctx.stroke();
-      }
-    }
+    ctx.fillStyle = "#f29339";
+    ctx.beginPath();
+    ctx.moveTo(-44, -26);
+    ctx.lineTo(44, -26);
+    ctx.lineTo(62, 84);
+    ctx.lineTo(-62, 84);
+    ctx.closePath();
+    ctx.fill();
 
-    ctx.fillStyle = "#f18a2a";
-    ctx.fillRect(-18, 8, 36, 58);
-    ctx.fillStyle = "#f2d1b1";
-    ctx.fillRect(-28, 14, 10, 34);
-    ctx.fillRect(18, 14, 10, 34);
+    ctx.fillStyle = "#f2cc41";
+    ctx.fillRect(-35, -27, 70, 18);
 
-    if (turning) {
-      ctx.strokeStyle = "rgba(255,255,255,0.8)";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(-28, -40, 56, 112);
-    }
+    ctx.fillStyle = "#f6d9ba";
+    ctx.fillRect(-58, -12, 13, 54);
+    ctx.fillRect(45, -12, 13, 54);
+    ctx.fillRect(-33, 84, 18, 70);
+    ctx.fillRect(15, 84, 18, 70);
 
+    ctx.save();
+    ctx.translate(0, -62);
+    ctx.rotate(headRotation);
+
+    ctx.fillStyle = "#2d1f1a";
+    ctx.beginPath();
+    ctx.arc(0, 0, 30, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#f6d9ba";
+    ctx.beginPath();
+    ctx.arc(0, 0, 24, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#2f231d";
+    ctx.beginPath();
+    ctx.arc(-24, -4, 9, 0, Math.PI * 2);
+    ctx.arc(24, -4, 9, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#f6d9ba";
+    ctx.beginPath();
+    ctx.arc(-24, -4, 5, 0, Math.PI * 2);
+    ctx.arc(24, -4, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(-8, -2, 5.3, 0, Math.PI * 2);
+    ctx.arc(8, -2, 5.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#111";
+    ctx.beginPath();
+    ctx.arc(-8, -2, 2.7, 0, Math.PI * 2);
+    ctx.arc(8, -2, 2.7, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#8f5a4b";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-6, 10);
+    ctx.quadraticCurveTo(0, 13, 6, 10);
+    ctx.stroke();
+
+    ctx.restore();
     ctx.restore();
   }
 
-  #drawBeam(ctx) {
-    const beam = this.doll.getBeamRect();
-    const grad = ctx.createLinearGradient(0, beam.y, 0, beam.y + beam.height);
-    grad.addColorStop(0, "rgba(255,95,95,0.30)");
-    grad.addColorStop(1, "rgba(255,95,95,0.03)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(beam.x, beam.y, beam.width, beam.height);
+  #drawVisionCone(ctx) {
+    const cone = this.vision.getCone();
+
+    ctx.fillStyle = "rgba(0,0,0,0.14)";
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    const glow = ctx.createRadialGradient(cone.origin.x, cone.origin.y, 40, cone.origin.x, cone.origin.y, cone.radius);
+    glow.addColorStop(0, "rgba(255,60,60,0.34)");
+    glow.addColorStop(1, "rgba(255,60,60,0.02)");
+
+    ctx.beginPath();
+    ctx.moveTo(cone.origin.x, cone.origin.y);
+    ctx.lineTo(cone.p1.x, cone.p1.y);
+    ctx.lineTo(cone.p2.x, cone.p2.y);
+    ctx.closePath();
+    ctx.fillStyle = glow;
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255,128,128,0.8)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 
   #drawPlayers(ctx, now) {
     for (const p of this.players.getAll()) {
       const walkBounce = p.bounce > 0 ? Math.sin(now * 0.03) * 4 * p.bounce : 0;
+      const highlighted = this.doll.isScanning() && this.vision.isPointInside({ x: p.x, y: p.y }) && p.state === "alive";
 
       ctx.save();
       ctx.translate(p.x, p.y + walkBounce);
@@ -338,6 +424,16 @@ export class GameController {
       ctx.lineTo(7, 26);
       ctx.stroke();
 
+      if (highlighted) {
+        ctx.shadowColor = "rgba(255,120,120,0.95)";
+        ctx.shadowBlur = 16;
+        ctx.strokeStyle = "#ffd1d1";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 2, 18, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
       ctx.restore();
 
       ctx.font = "bold 18px sans-serif";
@@ -345,7 +441,7 @@ export class GameController {
       ctx.lineWidth = 4;
       ctx.strokeStyle = "#000";
       ctx.strokeText(p.username, p.x, p.y - 28);
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = highlighted ? "#ffd7d7" : "#fff";
       ctx.fillText(p.username, p.x, p.y - 28);
     }
   }
