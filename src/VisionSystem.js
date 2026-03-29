@@ -27,7 +27,7 @@ export class VisionSystem {
     this.scanState.halfAngle = this.halfAngle;
   }
 
-  update(now, { scanning = false, aggressive = false } = {}) {
+  update(now, { scanning = false, aggressive = false, aggressiveProgress = 0 } = {}) {
     if (!scanning) {
       this.currentDirection = this.baseDirection;
       this.scanState.halfAngle = this.halfAngle;
@@ -35,7 +35,9 @@ export class VisionSystem {
     }
 
     const maxOffset = this.sweepArc / 2;
-    const speedMultiplier = aggressive ? CONFIG.game.cone.speedMultiplier : 1;
+    const speedMultiplier = aggressive
+      ? 1 + (CONFIG.game.cone.speedMultiplier - 1) * (0.45 + aggressiveProgress * 0.55)
+      : 1;
     this.scanState.halfAngle = aggressive
       ? this.halfAngle * CONFIG.game.cone.aggressiveHalfAngleScale
       : this.halfAngle;
@@ -45,13 +47,14 @@ export class VisionSystem {
       const maxSpeed = CONFIG.game.cone.maxAngularSpeed * this.levelFactor;
       this.scanState.angularSpeed = randomInRange(minSpeed, maxSpeed);
       this.scanState.directionSign = Math.random() > 0.5 ? 1 : -1;
-      this.scanState.nextVariationAt = now + randomInRange(70, 220);
+      this.scanState.nextVariationAt = now + randomInRange(55, 170);
 
       if (Math.random() < CONFIG.game.cone.pauseChance) {
         this.scanState.pausedUntil = now + randomInRange(45, 125);
       }
       if (Math.random() < CONFIG.game.cone.jumpChance) {
-        this.currentDirection += randomInRange(-0.2, 0.2);
+        const jumpScale = aggressive ? 1.35 : 1;
+        this.currentDirection += randomInRange(-0.2, 0.2) * jumpScale;
       }
     }
 
