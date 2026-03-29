@@ -8,61 +8,97 @@ export class PlayerManager {
 
   addPlayer(username) {
     const id = `p_${this.sequence++}`;
-    const x = this.#lanePosition();
-    const y = randomInRange(CONFIG.player.spawnMinY, CONFIG.player.spawnMaxY);
     const player = {
       id,
       username,
-      x,
-      y,
-      color: "#f6f6f6",
-      state: "alive", // alive | eliminated | winner
+      x: this.#lanePosition(),
+      y: randomInRange(CONFIG.player.spawnMinY, CONFIG.player.spawnMaxY),
+      startY: CONFIG.game.startLineY,
+      color: randomPaletteColor(),
+      state: "alive", // alive | eliminated | winner | ranking
       lastMoveAt: 0,
+      movedInDanger: false,
       eliminatedAt: 0,
       rank: null,
+      rankAnimStartAt: 0,
+      rankFrom: null,
+      bounce: 0,
     };
     this.players.set(id, player);
     return player;
   }
 
   applyTap(id, now, isDanger) {
-    const player = this.players.get(id);
-    if (!player || player.state !== "alive") return;
-
-    player.y -= CONFIG.player.speedPerTap;
-    player.lastMoveAt = now;
-
-    if (isDanger) {
-      player.movedInDanger = true;
-    }
+    const p = this.players.get(id);
+    if (!p || p.state !== "alive") return false;
+    p.y -= CONFIG.player.speedPerTap;
+    p.lastMoveAt = now;
+    p.bounce = 1;
+    if (isDanger) p.movedInDanger = true;
+    return true;
   }
 
   applyGlobalTap(now, isDanger) {
-    for (const player of this.players.values()) {
-      if (player.state !== "alive") continue;
-      player.y -= CONFIG.player.speedPerTap;
-      player.lastMoveAt = now;
-      if (isDanger) player.movedInDanger = true;
+    let moved = false;
+    for (const p of this.players.values()) {
+      if (p.state !== "alive") continue;
+      p.y -= CONFIG.player.speedPerTap;
+      p.lastMoveAt = now;
+      p.bounce = 1;
+      if (isDanger) p.movedInDanger = true;
+      moved = true;
     }
+    return moved;
   }
 
   eliminatePlayer(id, now) {
-    const player = this.players.get(id);
-    if (!player || player.state !== "alive") return;
-    player.state = "eliminated";
-    player.color = "#ff4545";
-    player.eliminatedAt = now;
+    const p = this.players.get(id);
+    if (!p || p.state !== "alive") return null;
+    p.state = "eliminated";
+    p.eliminatedAt = now;
+    return p;
   }
 
-  markWinner(id, place) {
-    const player = this.players.get(id);
-    if (!player || player.state !== "alive") return;
-    player.state = "winner";
-    player.rank = place;
-    player.color = "#ffe066";
+  markWinner(id, place, now) {
+    const p = this.players.get(id);
+    if (!p || p.state !== "alive") return null;
+    p.state = "winner";
+    p.rank = place;
+    p.rankAnimStartAt = now;
+    p.rankFrom = { x: p.x, y: p.y };
+    return p;
   }
 
-  resetRound() {
+  update(now) {
+    for (const [id, p] of this.players.entries()) {
+      if (p.bounce > 0) p.bounce = Math.max(0, p.bounce - 0.08);
+
+      if (p.state === "winner") {
+        const t = Math.min(1, (now - p.rankAnimStartAt) / CONFIG.player.rankTravelMs);
+        p.x = lerp(p.rankFrom.x, 500, t);
+        p.y = lerp(p.rankFrom.y, 94 + p.rank * 26, t);
+        if (t >= 1) {
+          p.state = "ranking";
+          this.players.delete(id);
+        }
+      }
+
+      if (p.state === "eliminated" && now - p.eliminatedAt > CONFIG.player.eliminationFadeMs) {
+        this.players.delete(id);
+      }
+    }
+  }
+
+  resetRoundToStart() {
+    for (const p of this.players.values()) {
+      if (p.state === "alive") {
+        p.y = randomInRange(CONFIG.player.spawnMinY, CONFIG.player.spawnMaxY);
+        p.movedInDanger = false;
+      }
+    }
+  }
+
+  clearAll() {
     this.players.clear();
   }
 
@@ -70,34 +106,20 @@ export class PlayerManager {
     return [...this.players.values()];
   }
 
+  getAlive() {
+    return this.getAll().filter((p) => p.state === "alive");
+  }
+
   getAliveCount() {
-    let count = 0;
-    for (const player of this.players.values()) {
-      if (player.state === "alive") count += 1;
-    }
-    return count;
+    return this.getAlive().length;
   }
 
   getMoversInDanger() {
-    return this.getAll().filter((p) => p.state === "alive" && p.movedInDanger);
+    return this.getAlive().filter((p) => p.movedInDanger);
   }
 
   clearDangerMovementFlags() {
-    for (const player of this.players.values()) {
-      player.movedInDanger = false;
-    }
-  }
-
-  cleanupEliminated(now) {
-    for (const [id, p] of this.players.entries()) {
-      if (p.state === "eliminated" && now - p.eliminatedAt > CONFIG.player.eliminationFadeMs) {
-        this.players.delete(id);
-      }
-    }
-  }
-
-  getLiveAndWinners() {
-    return this.getAll().filter((p) => p.state === "alive" || p.state === "winner");
+    for (const p of this.players.values()) p.movedInDanger = false;
   }
 
   #lanePosition() {
@@ -107,4 +129,13 @@ export class PlayerManager {
 
 function randomInRange(min, max) {
   return Math.random() * (max - min) + min;
+}
+
+function randomPaletteColor() {
+  const palette = ["#80ed99", "#7bdff2", "#ffd166", "#cdb4db", "#ffadad", "#bde0fe"];
+  return palette[Math.floor(Math.random() * palette.length)];
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
 }

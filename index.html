@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Luz Roja, Luz Verde - Arcade Vertical</title>
+    <title>Squid Runner - Luz Roja / Luz Verde</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -11,9 +11,9 @@
       <header class="hud-top">
         <div class="hud-block">
           <span class="hud-label">Tiempo</span>
-          <strong id="time-left">90</strong>
+          <strong id="time-left">70</strong>
         </div>
-        <div class="hud-block state" id="game-state" data-state="safe">SAFE</div>
+        <div class="hud-block state" id="game-state" data-state="safe">LUZ VERDE</div>
         <div class="hud-block">
           <span class="hud-label">Jugando</span>
           <strong id="alive-count">0</strong>
@@ -21,22 +21,27 @@
       </header>
 
       <aside class="hud-ranking">
-        <h2>TOP 3</h2>
+        <div class="ranking-head">
+          <h2>TOP 3</h2>
+          <span id="level-tag" class="level-tag">Nivel 1</span>
+        </div>
         <ol id="ranking-list">
-          <li>—</li>
-          <li>—</li>
-          <li>—</li>
+          <li>🥇 —</li>
+          <li>🥈 —</li>
+          <li>🥉 —</li>
         </ol>
       </aside>
 
       <main class="game-viewport">
         <canvas id="game-canvas" width="540" height="960"></canvas>
         <div class="flash" id="flash-overlay"></div>
-        <div class="comment-zone">Espacio libre para comentarios / overlays</div>
+        <div class="float-layer" id="float-layer"></div>
+        <div class="alert-text" id="alert-text" data-tone="neutral">Envía una rosa para entrar 🌹</div>
+        <div class="game-message" id="game-message">Dale tap tap para avanzar</div>
       </main>
 
       <footer class="control-panel">
-        <button id="spawn-btn">Enviar 🌹 (nuevo jugador)</button>
+        <button id="spawn-btn">Enviar 🌹</button>
         <button id="tap-btn">Tap global</button>
         <button id="auto-tap-btn">Auto Tap: OFF</button>
       </footer>

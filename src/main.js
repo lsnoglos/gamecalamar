@@ -10,11 +10,15 @@ const ui = {
   timeLeft: document.getElementById("time-left"),
   gameState: document.getElementById("game-state"),
   aliveCount: document.getElementById("alive-count"),
+  levelTag: document.getElementById("level-tag"),
   rankingItems: [...document.querySelectorAll("#ranking-list li")],
   spawnBtn: document.getElementById("spawn-btn"),
   tapBtn: document.getElementById("tap-btn"),
   autoTapBtn: document.getElementById("auto-tap-btn"),
   flash: document.getElementById("flash-overlay"),
+  gameMessage: document.getElementById("game-message"),
+  alertText: document.getElementById("alert-text"),
+  floatLayer: document.getElementById("float-layer"),
 };
 
 const game = new GameController(canvas, ui);

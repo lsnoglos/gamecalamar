@@ -4,16 +4,23 @@ export class RankingSystem {
   }
 
   registerWinner(player) {
-    if (this.winners.some((winner) => winner.id === player.id)) return;
-    this.winners.push({
+    if (this.winners.some((w) => w.id === player.id)) return null;
+    const result = {
       id: player.id,
       username: player.username,
       timestamp: performance.now(),
-    });
+      place: this.winners.length + 1,
+    };
+    this.winners.push(result);
+    return result;
   }
 
   top3() {
     return this.winners.slice(0, 3);
+  }
+
+  hasTop3() {
+    return this.winners.length >= 3;
   }
 
   reset() {
