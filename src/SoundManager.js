@@ -35,6 +35,10 @@ export class SoundManager {
     this.#play("doll_turn", 0.6, () => this.#sweep(260, 780, 0.2));
   }
 
+  playScan() {
+    this.#sweep(700, 320, 0.32);
+  }
+
   playElimination() {
     this.#play("elimination", 0.55, () => this.#blip(130, 0.14, "sawtooth", 0.08));
   }

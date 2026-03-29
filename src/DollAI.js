@@ -7,6 +7,7 @@ export class DollAI {
     this.level = 1;
     this.rotation = Math.PI;
     this.turnStartAt = 0;
+    this.turnDuration = 190;
   }
 
   start(now, level = 1) {
@@ -20,7 +21,8 @@ export class DollAI {
     if (this.state === "safe") {
       this.state = "turn";
       this.turnStartAt = now;
-      this.stateUntil = now + CONFIG.game.turnMs;
+      this.turnDuration = profileForLevel(this.level).turnMs;
+      this.stateUntil = now + this.turnDuration;
       return "turn";
     }
 
@@ -36,40 +38,36 @@ export class DollAI {
   #setSafe(now) {
     this.state = "safe";
     this.rotation = Math.PI;
-    const minMs = Math.max(CONFIG.game.minSafeMs, CONFIG.game.safeMinMs - (this.level - 1) * CONFIG.game.levelSafeReduction);
-    const maxMs = Math.max(minMs + 250, CONFIG.game.safeMaxMs - (this.level - 1) * CONFIG.game.levelSafeReduction * 1.2);
-    this.stateUntil = now + randomInRange(minMs, maxMs);
+    const profile = profileForLevel(this.level);
+    this.stateUntil = now + randomInRange(profile.safeMinMs, profile.safeMaxMs);
   }
 
   #setDanger(now) {
     this.state = "danger";
     this.rotation = 0;
-    const minMs = Math.max(CONFIG.game.minDangerMs, CONFIG.game.dangerMinMs - (this.level - 1) * CONFIG.game.levelDangerReduction);
-    const maxMs = Math.max(minMs + 200, CONFIG.game.dangerMaxMs - (this.level - 1) * CONFIG.game.levelDangerReduction * 1.25);
-    this.stateUntil = now + randomInRange(minMs, maxMs);
+    const profile = profileForLevel(this.level);
+    this.stateUntil = now + randomInRange(profile.dangerMinMs, profile.dangerMaxMs);
   }
 
   isDanger() {
     return this.state === "danger" || this.state === "turn";
   }
 
-  getBeamRect() {
-    const x = CONFIG.canvas.width / 2 - CONFIG.game.beamWidth / 2;
-    const y = 190;
-    return {
-      x,
-      y,
-      width: CONFIG.game.beamWidth,
-      height: CONFIG.game.beamLength,
-    };
+  isScanning() {
+    return this.state === "danger";
   }
 
-  isInsideBeam(point) {
-    const beam = this.getBeamRect();
-    return point.x >= beam.x && point.x <= beam.x + beam.width && point.y >= beam.y && point.y <= beam.y + beam.height;
+  turnProgress(now) {
+    if (this.state !== "turn") return this.state === "danger" ? 1 : 0;
+    return Math.min(1, (now - this.turnStartAt) / this.turnDuration);
   }
 }
 
 function randomInRange(min, max) {
   return Math.random() * (max - min) + min;
+}
+
+function profileForLevel(level) {
+  const profiles = CONFIG.game.levelProfiles;
+  return profiles[Math.min(profiles.length - 1, Math.max(0, level - 1))];
 }

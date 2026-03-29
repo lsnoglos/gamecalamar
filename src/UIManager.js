@@ -1,11 +1,10 @@
 import { CONFIG } from "./config.js";
 
 const ROTATING_MESSAGES = [
-  "Envía una rosa para entrar 🌹",
-  "Dale tap tap para avanzar",
-  "¿Podrás quedar en 1er lugar?",
-  "La muñeca está molesta…",
-  "¡No te muevas!",
+  "No te muevas…",
+  "La muñeca te está mirando 👁️",
+  "Corre… ahora…",
+  "¿Te salvarás?",
 ];
 
 export class UIManager {
@@ -61,11 +60,11 @@ export class UIManager {
     this.ui.shell.animate(
       [
         { transform: "translateX(0)" },
-        { transform: "translateX(-2px)" },
-        { transform: "translateX(3px)" },
+        { transform: "translateX(-3px)" },
+        { transform: "translateX(4px)" },
         { transform: "translateX(0)" },
       ],
-      { duration: 180, iterations: 2 },
+      { duration: 170, iterations: 2 },
     );
   }
 }
