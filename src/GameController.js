@@ -251,6 +251,7 @@ export class GameController {
   }
 
   #drawField(ctx) {
+    const sceneOffsetY = -22;
     const sky = ctx.createLinearGradient(0, 0, 0, 310);
     sky.addColorStop(0, "#95d7ff");
     sky.addColorStop(1, "#c6e7fb");
@@ -262,17 +263,17 @@ export class GameController {
 
     ctx.fillStyle = "rgba(63, 48, 36, 0.32)";
     ctx.beginPath();
-    ctx.ellipse(270, 245, 102, 24, 0, 0, Math.PI * 2);
+    ctx.ellipse(270, 245 + sceneOffsetY, 102, 24, 0, 0, Math.PI * 2);
     ctx.fill();
 
     const trunk = new Path2D();
-    trunk.moveTo(240, 250);
-    trunk.bezierCurveTo(220, 210, 228, 170, 246, 132);
-    trunk.bezierCurveTo(257, 112, 254, 90, 268, 72);
-    trunk.bezierCurveTo(284, 94, 286, 120, 296, 146);
-    trunk.bezierCurveTo(308, 182, 318, 214, 300, 250);
+    trunk.moveTo(240, 250 + sceneOffsetY);
+    trunk.bezierCurveTo(220, 210 + sceneOffsetY, 228, 170 + sceneOffsetY, 246, 132 + sceneOffsetY);
+    trunk.bezierCurveTo(257, 112 + sceneOffsetY, 254, 90 + sceneOffsetY, 268, 72 + sceneOffsetY);
+    trunk.bezierCurveTo(284, 94 + sceneOffsetY, 286, 120 + sceneOffsetY, 296, 146 + sceneOffsetY);
+    trunk.bezierCurveTo(308, 182 + sceneOffsetY, 318, 214 + sceneOffsetY, 300, 250 + sceneOffsetY);
     trunk.closePath();
-    const trunkPaint = ctx.createLinearGradient(232, 74, 302, 250);
+    const trunkPaint = ctx.createLinearGradient(232, 74 + sceneOffsetY, 302, 250 + sceneOffsetY);
     trunkPaint.addColorStop(0, "#86624c");
     trunkPaint.addColorStop(0.45, "#a0785b");
     trunkPaint.addColorStop(1, "#755744");
@@ -283,66 +284,88 @@ export class GameController {
     ctx.lineWidth = 11;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(268, 104);
-    ctx.quadraticCurveTo(210, 78, 156, 46);
-    ctx.moveTo(273, 98);
-    ctx.quadraticCurveTo(330, 78, 386, 48);
-    ctx.moveTo(264, 128);
-    ctx.quadraticCurveTo(220, 120, 176, 100);
+    ctx.moveTo(268, 104 + sceneOffsetY);
+    ctx.quadraticCurveTo(210, 78 + sceneOffsetY, 156, 46 + sceneOffsetY);
+    ctx.moveTo(273, 98 + sceneOffsetY);
+    ctx.quadraticCurveTo(330, 78 + sceneOffsetY, 386, 48 + sceneOffsetY);
+    ctx.moveTo(264, 128 + sceneOffsetY);
+    ctx.quadraticCurveTo(220, 120 + sceneOffsetY, 176, 100 + sceneOffsetY);
     ctx.stroke();
     ctx.restore();
 
     ctx.fillStyle = "#f9f9f2";
-    ctx.fillRect(420, 176, 92, 72);
+    ctx.fillRect(422, 154 + sceneOffsetY, 88, 68);
     ctx.fillStyle = "#b84a37";
     ctx.beginPath();
-    ctx.moveTo(410, 176);
-    ctx.lineTo(466, 146);
-    ctx.lineTo(522, 176);
+    ctx.moveTo(412, 154 + sceneOffsetY);
+    ctx.lineTo(466, 126 + sceneOffsetY);
+    ctx.lineTo(520, 154 + sceneOffsetY);
     ctx.closePath();
     ctx.fill();
 
     ctx.fillStyle = "#8f5e3e";
-    ctx.fillRect(457, 220, 20, 28);
+    ctx.fillRect(455, 196 + sceneOffsetY, 18, 26);
     ctx.fillStyle = "#d4ecff";
-    ctx.fillRect(486, 196, 18, 16);
+    ctx.fillRect(483, 174 + sceneOffsetY, 16, 14);
     ctx.strokeStyle = "#84644f";
     ctx.lineWidth = 2;
-    ctx.strokeRect(486, 196, 18, 16);
+    ctx.strokeRect(483, 174 + sceneOffsetY, 16, 14);
     ctx.beginPath();
-    ctx.moveTo(495, 196);
-    ctx.lineTo(495, 212);
-    ctx.moveTo(486, 204);
-    ctx.lineTo(504, 204);
+    ctx.moveTo(491, 174 + sceneOffsetY);
+    ctx.lineTo(491, 188 + sceneOffsetY);
+    ctx.moveTo(483, 181 + sceneOffsetY);
+    ctx.lineTo(499, 181 + sceneOffsetY);
     ctx.stroke();
 
-    ctx.fillStyle = "#d7bf7a";
-    ctx.fillRect(0, 250, this.canvas.width, this.canvas.height - 250);
-    for (let y = 252; y < this.canvas.height; y += 14) {
+    const grassTop = 250 + sceneOffsetY;
+    const grassGradient = ctx.createLinearGradient(0, grassTop + 8, this.canvas.width, this.canvas.height);
+    grassGradient.addColorStop(0, "#4d6f38");
+    grassGradient.addColorStop(0.52, "#6f9051");
+    grassGradient.addColorStop(1, "#88ad64");
+    ctx.fillStyle = grassGradient;
+    ctx.fillRect(0, grassTop, this.canvas.width, this.canvas.height - grassTop);
+
+    const grassPalette = ["#476833", "#628347", "#7ea65c"];
+    for (let y = grassTop + 2; y < this.canvas.height; y += 14) {
       for (let x = 0; x < this.canvas.width; x += 12) {
-        const n = Math.sin(x * 0.03 + y * 0.018);
-        ctx.fillStyle = n > 0 ? "#af9d58" : "#8da063";
+        const n = Math.sin(x * 0.03 + y * 0.018) + Math.cos(y * 0.024 - x * 0.011);
+        const idx = n > 0.85 ? 2 : n > -0.15 ? 1 : 0;
+        ctx.fillStyle = grassPalette[idx];
         ctx.fillRect(x, y, 11, 12);
       }
     }
 
-    ctx.fillStyle = "rgba(255,255,255,0.82)";
-    ctx.fillRect(0, CONFIG.game.finishLineY, this.canvas.width, 4);
-    ctx.strokeStyle = "rgba(20,20,20,0.55)";
+    const finishY = CONFIG.game.finishLineY;
+    ctx.save();
+    ctx.shadowColor = "rgba(255, 255, 255, 0.95)";
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.fillRect(0, finishY, this.canvas.width, 5);
+    ctx.restore();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, finishY - 2);
+    ctx.lineTo(this.canvas.width, finishY - 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(50,50,50,0.65)";
     ctx.setLineDash([8, 7]);
     ctx.beginPath();
-    ctx.moveTo(0, CONFIG.game.finishLineY + 4);
-    ctx.lineTo(this.canvas.width, CONFIG.game.finishLineY + 4);
+    ctx.moveTo(0, finishY + 6);
+    ctx.lineTo(this.canvas.width, finishY + 6);
     ctx.stroke();
     ctx.setLineDash([]);
   }
 
   #drawGuards(ctx, now) {
+    const sceneOffsetY = -22;
     const guards = [
-      { x: 136, y: 278, mask: "○" },
-      { x: 205, y: 294, mask: "△" },
-      { x: 336, y: 294, mask: "□" },
-      { x: 404, y: 278, mask: "○" },
+      { x: 136, y: 278 + sceneOffsetY, mask: "○" },
+      { x: 205, y: 294 + sceneOffsetY, mask: "△" },
+      { x: 336, y: 294 + sceneOffsetY, mask: "□" },
+      { x: 404, y: 278 + sceneOffsetY, mask: "○" },
     ];
     for (const g of guards) {
       const breath = Math.sin(now * 0.004 + g.x) * 1.7;
@@ -515,7 +538,7 @@ export class GameController {
 
   #computeDollPose(now) {
     const x = this.canvas.width / 2;
-    const y = 286;
+    const y = 264;
     const bob = this.doll.state === "safe" ? Math.sin(now * 0.006) * 1.4 : 0;
     const turnP = this.doll.turnProgress(now);
     const scanning = this.doll.isScanning();
