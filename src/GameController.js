@@ -34,6 +34,7 @@ export class GameController {
     this.dangerSinceAt = 0;
     this.aggressiveScan = false;
     this.aggressiveProgress = 0;
+    this.dollPose = this.#computeDollPose(performance.now());
 
     this.bridge = new EventBridge({
       onRoseGift: (username) => this.spawnPlayer(username),
@@ -139,6 +140,8 @@ export class GameController {
       aggressive: this.aggressiveScan,
       aggressiveProgress: this.aggressiveProgress,
     });
+    this.dollPose = this.#computeDollPose(now);
+    this.vision.setOrigin(this.dollPose.eyeCenter);
 
     if (this.doll.isScanning()) {
       this.#scanAndEliminate(now);
@@ -241,7 +244,7 @@ export class GameController {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.#drawField(ctx);
-    if (this.doll.isScanning()) this.#drawVisionCone(ctx);
+    if (this.doll.isScanning()) this.#drawVisionCone(ctx, now);
     this.#drawGuards(ctx, now);
     this.#drawDoll(ctx, now);
     this.#drawPlayers(ctx, now);
@@ -358,12 +361,7 @@ export class GameController {
   }
 
   #drawDoll(ctx, now) {
-    const x = this.canvas.width / 2;
-    const y = 286;
-    const bob = this.doll.state === "safe" ? Math.sin(now * 0.006) * 1.4 : 0;
-    const turnP = this.doll.turnProgress(now);
-    const headRotation = this.doll.state === "turn" ? Math.PI - turnP * Math.PI : this.doll.state === "safe" ? Math.PI : 0;
-    const frontVisible = Math.max(0, Math.cos(headRotation));
+    const { x, y, bob, headRotation, frontVisible } = this.dollPose ?? this.#computeDollPose(now);
     const backVisible = 1 - frontVisible;
 
     ctx.save();
@@ -445,24 +443,7 @@ export class GameController {
     ctx.fill();
     if (firingLaser) {
       const pulse = 0.75 + Math.sin(now * 0.05) * 0.25;
-      const beamLen = 920;
       for (const eyeX of [-8, 8]) {
-        ctx.fillStyle = `rgba(255,20,20,${0.25 + 0.2 * pulse})`;
-        ctx.beginPath();
-        ctx.moveTo(eyeX - 2, 0);
-        ctx.lineTo(eyeX + 2, 0);
-        ctx.lineTo(eyeX + 18, beamLen);
-        ctx.lineTo(eyeX - 18, beamLen);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.strokeStyle = `rgba(255,110,110,${0.6 + 0.3 * pulse})`;
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        ctx.moveTo(eyeX, 0);
-        ctx.lineTo(eyeX + 1.5, beamLen);
-        ctx.stroke();
-
         ctx.fillStyle = "rgba(255,0,0,0.9)";
         ctx.beginPath();
         ctx.arc(eyeX, -2, 3.6 + pulse * 1.4, 0, Math.PI * 2);
@@ -482,7 +463,7 @@ export class GameController {
     ctx.restore();
   }
 
-  #drawVisionCone(ctx) {
+  #drawVisionCone(ctx, now) {
     const cone = this.vision.getCone();
 
     ctx.fillStyle = "rgba(0,0,0,0.14)";
@@ -503,6 +484,63 @@ export class GameController {
     ctx.strokeStyle = this.aggressiveScan ? "rgba(255,176,176,0.95)" : "rgba(255,128,128,0.8)";
     ctx.lineWidth = this.aggressiveScan ? 3 : 2;
     ctx.stroke();
+
+    if (!this.dollPose) return;
+    const pulse = 0.82 + Math.sin(now * 0.06) * 0.18;
+    const centerLength = cone.radius * 0.96;
+    const edgeLength = cone.radius * 0.9;
+
+    for (const eye of [this.dollPose.leftEye, this.dollPose.rightEye]) {
+      const cx = eye.x + Math.cos(cone.direction) * centerLength;
+      const cy = eye.y + Math.sin(cone.direction) * centerLength;
+      ctx.strokeStyle = `rgba(255,40,40,${0.65 + pulse * 0.25})`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(eye.x, eye.y);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+
+      for (const edgeAngle of [cone.leftAngle, cone.rightAngle]) {
+        const ex = eye.x + Math.cos(edgeAngle) * edgeLength;
+        const ey = eye.y + Math.sin(edgeAngle) * edgeLength;
+        ctx.strokeStyle = `rgba(255,100,100,${0.25 + pulse * 0.2})`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(eye.x, eye.y);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+      }
+    }
+  }
+
+  #computeDollPose(now) {
+    const x = this.canvas.width / 2;
+    const y = 286;
+    const bob = this.doll.state === "safe" ? Math.sin(now * 0.006) * 1.4 : 0;
+    const turnP = this.doll.turnProgress(now);
+    const scanning = this.doll.isScanning();
+    const scanHeadRotation = this.vision.getDirection() - Math.PI / 2;
+    const headRotation = this.doll.state === "turn" ? Math.PI - turnP * Math.PI : scanning ? scanHeadRotation : this.doll.state === "safe" ? Math.PI : 0;
+    const frontVisible = Math.max(0, Math.cos(headRotation));
+    const cos = Math.cos(headRotation);
+    const sin = Math.sin(headRotation);
+    const rotatePoint = (px, py) => ({
+      x: x + px * cos - py * sin,
+      y: y + bob + px * sin + py * cos,
+    });
+    const leftEye = rotatePoint(-8, -64);
+    const rightEye = rotatePoint(8, -64);
+    const eyeCenter = rotatePoint(0, -64);
+    return {
+      x,
+      y,
+      bob,
+      headRotation,
+      frontVisible,
+      leftEye,
+      rightEye,
+      eyeCenter,
+    };
   }
 
   #drawPlayers(ctx, now) {

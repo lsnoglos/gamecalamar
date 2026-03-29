@@ -27,6 +27,14 @@ export class VisionSystem {
     this.scanState.halfAngle = this.halfAngle;
   }
 
+  setOrigin(origin) {
+    this.origin = { x: origin.x, y: origin.y };
+  }
+
+  getDirection() {
+    return this.currentDirection;
+  }
+
   update(now, { scanning = false, aggressive = false, aggressiveProgress = 0 } = {}) {
     if (!scanning) {
       this.currentDirection = this.baseDirection;
