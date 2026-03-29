@@ -2,21 +2,12 @@ import { CONFIG } from "./config.js";
 import { PlayerManager } from "./PlayerManager.js";
 import { DollAI } from "./DollAI.js";
 import { RankingSystem } from "./RankingSystem.js";
-import { SoundSystem } from "./SoundSystem.js";
 import { EventBridge } from "./EventBridge.js";
+import { SoundManager } from "./SoundManager.js";
+import { UIManager } from "./UIManager.js";
+import { ChatSystem } from "./ChatSystem.js";
 
-const USER_POOL = [
-  "NinjaFox",
-  "LunaTap",
-  "PixelRosa",
-  "NeoKoi",
-  "MayaRush",
-  "TicoLive",
-  "RexArcade",
-  "YukiStar",
-  "Gio99",
-  "CataPlay",
-];
+const USER_POOL = ["NinjaFox", "LunaTap", "PixelRosa", "NeoKoi", "MayaRush", "TicoLive", "RexArcade", "YukiStar"];
 
 export class GameController {
   constructor(canvas, ui) {
@@ -27,14 +18,17 @@ export class GameController {
     this.players = new PlayerManager();
     this.doll = new DollAI();
     this.ranking = new RankingSystem();
-    this.sounds = new SoundSystem();
+    this.sounds = new SoundManager();
+    this.uiManager = new UIManager(ui);
+    this.chat = new ChatSystem();
 
+    this.level = 1;
     this.roundStartAt = performance.now();
     this.roundDurationMs = CONFIG.game.roundSeconds * 1000;
-    this.lastFrame = performance.now();
+    this.extraTimeUsed = false;
     this.autoTap = false;
-    this.autoTapInterval = 160;
     this.nextAutoTapAt = performance.now();
+    this.autoTapInterval = 160;
 
     this.bridge = new EventBridge({
       onRoseGift: (username) => this.spawnPlayer(username),
@@ -48,14 +42,17 @@ export class GameController {
   start() {
     const now = performance.now();
     this.roundStartAt = now;
-    this.doll.start(now);
+    this.doll.start(now, this.level);
+    this.sounds.playIdle();
     requestAnimationFrame((t) => this.#loop(t));
   }
 
   spawnPlayer(username) {
     this.sounds.enable();
-    this.players.addPlayer(username);
-    this.#syncHud();
+    const name = username ?? `${USER_POOL[Math.floor(Math.random() * USER_POOL.length)]}${Math.floor(Math.random() * 90 + 10)}`;
+    this.players.addPlayer(name);
+    this.uiManager.announce(`${name} entró al juego`, "ok");
+    this.chat.sendChatMessage("Nuevo jugador ha entrado al juego");
   }
 
   handleTap(username) {
@@ -65,63 +62,46 @@ export class GameController {
 
     if (username) {
       const candidate = this.players.getAll().find((p) => p.username === username);
-      if (candidate) {
-        this.players.applyTap(candidate.id, now, isDanger);
-        this.sounds.tap();
+      if (candidate && this.players.applyTap(candidate.id, now, isDanger)) {
+        this.sounds.playStep();
+        this.uiManager.floatingText(`+tap ${candidate.username}`, candidate.x, candidate.y - 30);
       }
       return;
     }
 
-    this.players.applyGlobalTap(now, isDanger);
-    this.sounds.tap();
+    if (this.players.applyGlobalTap(now, isDanger)) {
+      this.sounds.playStep();
+      this.uiManager.announce("Dale tap tap para avanzar", "neutral");
+    }
   }
 
   #wireUI() {
-    this.ui.spawnBtn.addEventListener("click", () => {
-      const randomName = USER_POOL[Math.floor(Math.random() * USER_POOL.length)] + Math.floor(Math.random() * 90 + 10);
-      this.spawnPlayer(randomName);
-    });
-
+    this.ui.spawnBtn.addEventListener("click", () => this.spawnPlayer());
     this.ui.tapBtn.addEventListener("mousedown", () => this.handleTap());
     this.ui.tapBtn.addEventListener("touchstart", () => this.handleTap(), { passive: true });
-
     this.ui.autoTapBtn.addEventListener("click", () => {
       this.autoTap = !this.autoTap;
       this.ui.autoTapBtn.textContent = `Auto Tap: ${this.autoTap ? "ON" : "OFF"}`;
-    });
-
-    window.addEventListener("keydown", (ev) => {
-      if (ev.key.toLowerCase() === "r") {
-        const randomName = `view_${Math.floor(Math.random() * 9999)}`;
-        this.spawnPlayer(randomName);
-      }
-      if (ev.code === "Space") {
-        ev.preventDefault();
-        this.handleTap();
-      }
+      this.uiManager.announce(this.autoTap ? "Auto Tap activado" : "Auto Tap desactivado", "neutral");
     });
   }
 
   #loop(now) {
     const stateEvent = this.doll.update(now);
-    this.players.cleanupEliminated(now);
 
     if (stateEvent === "turn") {
-      this.sounds.turn();
-      this.#triggerFlash();
-      this.#shakeScreen();
+      this.sounds.playTurn();
+      this.uiManager.triggerTurnFX();
+      this.uiManager.announce("¡No te muevas!", "danger");
     }
 
     if (stateEvent === "danger") {
-      const beam = this.doll.getBeamPolygon();
-      const movers = this.players.getMoversInDanger();
-      for (const mover of movers) {
-        if (pointInTriangle({ x: mover.x, y: mover.y }, beam.origin, beam.a, beam.b)) {
-          this.players.eliminatePlayer(mover.id, now);
-          this.sounds.elimination();
-        }
-      }
-      this.players.clearDangerMovementFlags();
+      this.#scanAndEliminate(now);
+    }
+
+    if (stateEvent === "safe") {
+      this.sounds.playIdle();
+      this.uiManager.announce("Luz verde: ¡corre!", "ok");
     }
 
     if (this.autoTap && now >= this.nextAutoTapAt) {
@@ -129,22 +109,42 @@ export class GameController {
       this.nextAutoTapAt = now + this.autoTapInterval;
     }
 
-    this.#checkGoal();
+    this.players.update(now);
+    this.#checkGoal(now);
     this.#checkRoundTimer(now);
-    this.#render(now);
-    this.#syncHud(now);
 
-    this.lastFrame = now;
+    this.uiManager.rotateBottomMessage(now);
+    this.#syncHud(now);
+    this.#render(now);
+
     requestAnimationFrame((t) => this.#loop(t));
   }
 
-  #checkGoal() {
-    for (const p of this.players.getAll()) {
-      if (p.state === "alive" && p.y <= 228) {
-        this.ranking.registerWinner(p);
-        this.players.markWinner(p.id, this.ranking.winners.length);
-        this.sounds.win();
+  #scanAndEliminate(now) {
+    for (const mover of this.players.getMoversInDanger()) {
+      if (this.doll.isInsideBeam({ x: mover.x, y: mover.y })) {
+        const eliminated = this.players.eliminatePlayer(mover.id, now);
+        if (eliminated) {
+          this.sounds.playElimination();
+          this.uiManager.announce(`${eliminated.username} eliminado`, "danger");
+          this.chat.sendChatMessage(`${eliminated.username} salió del juego 💀 envía una rosa para entrar`);
+        }
       }
+    }
+    this.players.clearDangerMovementFlags();
+  }
+
+  #checkGoal(now) {
+    for (const p of this.players.getAlive()) {
+      if (p.y > CONFIG.game.finishLineY) continue;
+      const registered = this.ranking.registerWinner(p);
+      if (!registered) continue;
+
+      this.players.markWinner(p.id, registered.place, now);
+      this.sounds.playVictory();
+      this.uiManager.floatingText(`¡${p.username} llegó a la meta!`, p.x, p.y - 24, "victory");
+      this.uiManager.announce(`¡${p.username} llegó a la meta!`, "ok");
+      this.chat.sendChatMessage(`${p.username} llegó a la meta 🏁 ${registered.place}er lugar`);
     }
   }
 
@@ -152,44 +152,39 @@ export class GameController {
     const elapsed = now - this.roundStartAt;
     if (elapsed < this.roundDurationMs) return;
 
-    this.players.resetRound();
+    if (!this.ranking.hasTop3() && !this.extraTimeUsed) {
+      this.extraTimeUsed = true;
+      this.roundDurationMs += CONFIG.game.extraTimeSeconds * 1000;
+      this.uiManager.announce("Tiempo extra activado", "neutral");
+      return;
+    }
+
+    if (this.ranking.hasTop3()) {
+      this.level += 1;
+      this.uiManager.announce(`Nivel ${this.level}`, "ok");
+      this.players.resetRoundToStart();
+    } else {
+      this.level = 1;
+      this.players.clearAll();
+      this.uiManager.announce("Ronda terminada: reinicio", "neutral");
+    }
+
     this.ranking.reset();
     this.roundStartAt = now;
-    this.doll.start(now);
+    this.roundDurationMs = CONFIG.game.roundSeconds * 1000;
+    this.extraTimeUsed = false;
+    this.doll.start(now, this.level);
   }
 
-  #syncHud(now = performance.now()) {
-    const remainMs = Math.max(0, this.roundDurationMs - (now - this.roundStartAt));
-    this.ui.timeLeft.textContent = Math.ceil(remainMs / 1000).toString();
-    this.ui.aliveCount.textContent = this.players.getAliveCount().toString();
-
-    const stateLabel = this.doll.state === "safe" ? "SAFE" : "DANGER";
-    this.ui.gameState.textContent = stateLabel;
-    this.ui.gameState.dataset.state = this.doll.state === "safe" ? "safe" : "danger";
-
-    const top3 = this.ranking.top3();
-    for (let i = 0; i < 3; i++) {
-      const item = this.ui.rankingItems[i];
-      item.textContent = top3[i] ? `${medal(i)} ${top3[i].username}` : `${medal(i)} —`;
-    }
-  }
-
-  #triggerFlash() {
-    this.ui.flash.classList.remove("active");
-    void this.ui.flash.offsetWidth;
-    this.ui.flash.classList.add("active");
-  }
-
-  #shakeScreen() {
-    this.ui.shell.animate(
-      [
-        { transform: "translateX(0)" },
-        { transform: "translateX(-2px)" },
-        { transform: "translateX(2px)" },
-        { transform: "translateX(0)" },
-      ],
-      { duration: 170, iterations: 2 },
-    );
+  #syncHud(now) {
+    const remainSec = Math.max(0, (this.roundDurationMs - (now - this.roundStartAt)) / 1000);
+    this.uiManager.updateHud({
+      timeLeft: remainSec,
+      aliveCount: this.players.getAliveCount(),
+      gameState: this.doll.state === "safe" ? "safe" : "danger",
+      ranking: this.ranking.top3(),
+      level: this.level,
+    });
   }
 
   #render(now) {
@@ -197,93 +192,161 @@ export class GameController {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.#drawField(ctx);
+    this.#drawGuards(ctx, now);
     this.#drawDoll(ctx, now);
-
-    if (this.doll.state !== "safe") {
-      this.#drawBeam(ctx, this.doll.getBeamPolygon());
-    }
-
-    this.#drawPlayers(ctx);
+    if (this.doll.state !== "safe") this.#drawBeam(ctx);
+    this.#drawPlayers(ctx, now);
   }
 
   #drawField(ctx) {
-    ctx.fillStyle = "#c79566";
-    ctx.fillRect(0, 0, this.canvas.width, 230);
-    ctx.fillStyle = "#1e6749";
-    ctx.fillRect(0, 230, this.canvas.width, this.canvas.height - 230);
+    ctx.fillStyle = "#d3b08c";
+    ctx.fillRect(0, 0, this.canvas.width, 235);
+    ctx.fillStyle = "#2f8f57";
+    ctx.fillRect(0, 235, this.canvas.width, this.canvas.height - 235);
 
-    ctx.fillStyle = "#ff3e45";
-    ctx.fillRect(0, 230, this.canvas.width, 6);
+    for (let y = 236; y < this.canvas.height; y += 16) {
+      for (let x = 0; x < this.canvas.width; x += 16) {
+        ctx.fillStyle = (x / 16 + y / 16) % 2 === 0 ? "#2d854f" : "#3b9c60";
+        ctx.fillRect(x, y, 16, 16);
+      }
+    }
 
-    ctx.fillStyle = "rgba(255,255,255,0.1)";
-    for (let y = 250; y < this.canvas.height; y += 72) {
-      ctx.fillRect(20, y, this.canvas.width - 40, 1);
+    ctx.fillStyle = "#f5f5f5";
+    ctx.fillRect(0, CONFIG.game.finishLineY, this.canvas.width, 7);
+    ctx.fillStyle = "#f7df8d";
+    ctx.fillRect(0, CONFIG.game.startLineY, this.canvas.width, 5);
+  }
+
+  #drawGuards(ctx, now) {
+    const guards = [
+      { x: 125, y: 182, mask: "○" },
+      { x: 182, y: 196, mask: "△" },
+      { x: 357, y: 196, mask: "□" },
+      { x: 415, y: 182, mask: "○" },
+    ];
+    for (const g of guards) {
+      const breath = Math.sin(now * 0.005 + g.x) * 2;
+      ctx.save();
+      ctx.translate(g.x, g.y + breath);
+      ctx.fillStyle = "#bd1f29";
+      ctx.fillRect(-13, -26, 26, 46);
+      ctx.fillStyle = "#111";
+      ctx.fillRect(-11, -40, 22, 18);
+      ctx.fillStyle = "#f3f3f3";
+      ctx.font = "bold 13px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(g.mask, 0, -27);
+      ctx.restore();
     }
   }
 
   #drawDoll(ctx, now) {
     const x = this.canvas.width / 2;
-    const y = 156;
-    const bob = Math.sin(now * 0.008) * 3;
+    const y = 164;
+    const bob = Math.sin(now * 0.007) * 2;
+    const turning = this.doll.state === "turn";
 
     ctx.save();
     ctx.translate(x, y + bob);
 
-    ctx.fillStyle = "#121212";
-    ctx.fillRect(-14, -26, 28, 28);
-    ctx.fillStyle = "#f6d6b8";
-    ctx.fillRect(-13, -12, 26, 24);
-    ctx.fillStyle = "#f78f29";
-    ctx.fillRect(-18, 12, 36, 55);
+    if (this.doll.state === "safe") {
+      ctx.fillStyle = "#432311";
+      ctx.beginPath();
+      ctx.arc(0, -12, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f2d1b1";
+      ctx.fillRect(-10, -19, 20, 24);
+    } else {
+      ctx.fillStyle = "#f2d1b1";
+      ctx.fillRect(-10, -19, 20, 24);
+      ctx.fillStyle = "#3f2412";
+      ctx.fillRect(-11, -25, 22, 8);
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.arc(-4, -8, 2.2, 0, Math.PI * 2);
+      ctx.arc(4, -8, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (this.doll.state === "danger") {
+        ctx.strokeStyle = "rgba(255,80,80,0.9)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -8);
+        ctx.lineTo(0, 700);
+        ctx.stroke();
+      }
+    }
+
+    ctx.fillStyle = "#f18a2a";
+    ctx.fillRect(-18, 8, 36, 58);
+    ctx.fillStyle = "#f2d1b1";
+    ctx.fillRect(-28, 14, 10, 34);
+    ctx.fillRect(18, 14, 10, 34);
+
+    if (turning) {
+      ctx.strokeStyle = "rgba(255,255,255,0.8)";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(-28, -40, 56, 112);
+    }
 
     ctx.restore();
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 20px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("MUÑECA", x, 80);
   }
 
-  #drawBeam(ctx, beam) {
-    ctx.fillStyle = this.doll.state === "transition" ? "rgba(255,255,255,0.23)" : "rgba(255,65,65,0.2)";
-    ctx.beginPath();
-    ctx.moveTo(beam.origin.x, beam.origin.y);
-    ctx.lineTo(beam.a.x, beam.a.y);
-    ctx.lineTo(beam.b.x, beam.b.y);
-    ctx.closePath();
-    ctx.fill();
+  #drawBeam(ctx) {
+    const beam = this.doll.getBeamRect();
+    const grad = ctx.createLinearGradient(0, beam.y, 0, beam.y + beam.height);
+    grad.addColorStop(0, "rgba(255,95,95,0.30)");
+    grad.addColorStop(1, "rgba(255,95,95,0.03)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(beam.x, beam.y, beam.width, beam.height);
   }
 
-  #drawPlayers(ctx) {
-    for (const p of this.players.getLiveAndWinners()) {
-      if (p.state === "winner") {
-        ctx.fillStyle = "rgba(255, 217, 87, 0.3)";
-        ctx.fillRect(p.x - 18, p.y - 18, 36, 36);
+  #drawPlayers(ctx, now) {
+    for (const p of this.players.getAll()) {
+      const walkBounce = p.bounce > 0 ? Math.sin(now * 0.03) * 4 * p.bounce : 0;
+
+      ctx.save();
+      ctx.translate(p.x, p.y + walkBounce);
+
+      if (p.state === "eliminated") {
+        const t = Math.min(1, (now - p.eliminatedAt) / CONFIG.player.eliminationFadeMs);
+        const alpha = 1 - t;
+        const clipHeight = (1 - t) * 40;
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.rect(-15, 20 - clipHeight, 30, clipHeight + 18);
+        ctx.clip();
       }
 
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - 9, p.y - 15, 18, 24);
-      ctx.fillStyle = p.state === "eliminated" ? "#8a1313" : "#1ce67b";
-      ctx.fillRect(p.x - 8, p.y + 8, 16, 10);
-      ctx.fillStyle = "#ffe07a";
-      ctx.fillRect(p.x - 8, p.y - 21, 16, 6);
+      const bodyColor = p.state === "eliminated" ? "#ff3b3b" : p.color;
+      ctx.strokeStyle = bodyColor;
+      ctx.fillStyle = bodyColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, -14, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(0, 14);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-9, 9);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(9, 9);
+      ctx.moveTo(0, 14);
+      ctx.lineTo(-7, 26);
+      ctx.moveTo(0, 14);
+      ctx.lineTo(7, 26);
+      ctx.stroke();
 
-      ctx.fillStyle = "#0f0f0f";
-      ctx.font = "bold 12px sans-serif";
+      ctx.restore();
+
+      ctx.font = "bold 18px sans-serif";
       ctx.textAlign = "center";
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#000";
+      ctx.strokeText(p.username, p.x, p.y - 28);
+      ctx.fillStyle = "#fff";
       ctx.fillText(p.username, p.x, p.y - 28);
     }
   }
-}
-
-function medal(index) {
-  return ["🥇", "🥈", "🥉"][index] ?? "•";
-}
-
-function pointInTriangle(point, a, b, c) {
-  const area = 0.5 * (-b.y * c.x + a.y * (-b.x + c.x) + a.x * (b.y - c.y) + b.x * c.y);
-  const s = (1 / (2 * area)) * (a.y * c.x - a.x * c.y + (c.y - a.y) * point.x + (a.x - c.x) * point.y);
-  const t = (1 / (2 * area)) * (a.x * b.y - a.y * b.x + (a.y - b.y) * point.x + (b.x - a.x) * point.y);
-
-  return s >= 0 && t >= 0 && 1 - s - t >= 0;
 }
