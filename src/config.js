@@ -8,7 +8,7 @@ export const CONFIG = {
     extraTimeSeconds: 35,
     maxWinners: 3,
     startLineY: 914,
-    finishLineY: 156,
+    finishLineY: 138,
     finishWindow: 5,
     levelProfiles: [
       {

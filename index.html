@@ -20,25 +20,27 @@
         </div>
       </header>
 
-      <aside class="hud-ranking">
-        <div class="ranking-head">
-          <h2>TOP 3</h2>
-          <span id="level-tag" class="level-tag">Nivel 1</span>
-        </div>
-        <ol id="ranking-list">
-          <li>🥇 —</li>
-          <li>🥈 —</li>
-          <li>🥉 —</li>
-        </ol>
-      </aside>
+      <section class="scene-layout">
+        <aside class="hud-ranking">
+          <div class="ranking-head">
+            <h2>TOP 3</h2>
+            <span id="level-tag" class="level-tag">Nivel 1</span>
+          </div>
+          <ol id="ranking-list">
+            <li>🥇 —</li>
+            <li>🥈 —</li>
+            <li>🥉 —</li>
+          </ol>
+        </aside>
 
-      <main class="game-viewport">
-        <canvas id="game-canvas" width="540" height="960"></canvas>
-        <div class="flash" id="flash-overlay"></div>
-        <div class="float-layer" id="float-layer"></div>
-        <div class="alert-text" id="alert-text" data-tone="neutral">No te muevas…</div>
-        <div class="game-message" id="game-message">Corre… ahora…</div>
-      </main>
+        <main class="game-viewport">
+          <canvas id="game-canvas" width="540" height="960"></canvas>
+          <div class="flash" id="flash-overlay"></div>
+          <div class="float-layer" id="float-layer"></div>
+          <div class="alert-text" id="alert-text" data-tone="neutral">No te muevas…</div>
+          <div class="game-message" id="game-message">Corre… ahora…</div>
+        </main>
+      </section>
 
       <footer class="control-panel">
         <button id="spawn-btn">Enviar 🌹</button>
