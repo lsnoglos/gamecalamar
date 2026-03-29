@@ -71,7 +71,7 @@ export class PlayerManager {
     return p;
   }
 
-  update(now) {
+  update(now, { isDanger = false } = {}) {
     for (const [id, p] of this.players.entries()) {
       if (p.bounce > 0) p.bounce = Math.max(0, p.bounce - 0.08);
       while (p.pendingImpulses.length > 0 && p.pendingImpulses[0].dueAt <= now) {
@@ -84,6 +84,9 @@ export class PlayerManager {
 
       if (p.velocityY > 0) {
         p.y -= p.velocityY;
+        if (isDanger && p.velocityY > 0.01) {
+          p.movedInDanger = true;
+        }
         p.velocityY *= CONFIG.player.speedDamping;
         if (p.velocityY < 0.02) p.velocityY = 0;
       }

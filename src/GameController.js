@@ -30,9 +30,10 @@ export class GameController {
     this.extraTimeUsed = false;
     this.autoTap = false;
     this.nextAutoTapAt = performance.now();
-    this.autoTapInterval = 240;
+    this.autoTapInterval = 320;
     this.dangerSinceAt = 0;
     this.aggressiveScan = false;
+    this.aggressiveProgress = 0;
 
     this.bridge = new EventBridge({
       onRoseGift: (username) => this.spawnPlayer(username),
@@ -109,6 +110,7 @@ export class GameController {
       this.sounds.playScan();
       this.dangerSinceAt = now;
       this.aggressiveScan = false;
+      this.aggressiveProgress = 0;
       this.uiManager.setContextMessage("¡No te muevas!");
       this.uiManager.announce("La muñeca te está viendo 👁️", "danger");
     }
@@ -118,12 +120,14 @@ export class GameController {
       this.uiManager.announce("Corre… ahora…", "ok");
       this.uiManager.setContextMessage(Math.random() > 0.5 ? "Corre… ahora…" : "Avanza rápido");
       this.aggressiveScan = false;
+      this.aggressiveProgress = 0;
       this.uiManager.setDangerMode(false);
     }
 
     if (this.doll.isScanning()) {
       const scanningFor = now - this.dangerSinceAt;
       this.aggressiveScan = scanningFor >= CONFIG.game.cone.aggressiveAfterMs;
+      this.aggressiveProgress = Math.min(1, scanningFor / 1600);
       if (this.aggressiveScan) {
         this.uiManager.setContextMessage("¡Te está buscando!");
       }
@@ -133,6 +137,7 @@ export class GameController {
     this.vision.update(now, {
       scanning: this.doll.isScanning(),
       aggressive: this.aggressiveScan,
+      aggressiveProgress: this.aggressiveProgress,
     });
 
     if (this.doll.isScanning()) {
@@ -144,7 +149,7 @@ export class GameController {
       this.nextAutoTapAt = now + this.autoTapInterval;
     }
 
-    this.players.update(now);
+    this.players.update(now, { isDanger: this.doll.isDanger() });
     this.#checkGoal(now);
     this.#checkRoundTimer(now);
 
@@ -156,9 +161,14 @@ export class GameController {
   }
 
   #scanAndEliminate(now) {
+    const criticalY =
+      CONFIG.game.finishLineY +
+      (CONFIG.game.startLineY - CONFIG.game.finishLineY) * (1 - CONFIG.game.cone.criticalZonePercent);
+
     for (const mover of this.players.getMoversInDanger()) {
       if (mover.y <= CONFIG.game.finishLineY) continue;
-      if (this.vision.isPointInside({ x: mover.x, y: mover.y })) {
+      const inCriticalZone = mover.y <= criticalY;
+      if (inCriticalZone || this.vision.isPointInside({ x: mover.x, y: mover.y })) {
         const eliminated = this.players.eliminatePlayer(mover.id, now);
         if (eliminated) {
           this.sounds.playElimination();
