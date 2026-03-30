@@ -9,6 +9,12 @@ import { UIManager } from "./UIManager.js";
 import { ChatSystem } from "./ChatSystem.js";
 
 const USER_POOL = ["NinjaFox", "LunaTap", "PixelRosa", "NeoKoi", "MayaRush", "TicoLive", "RexArcade", "YukiStar"];
+const GUARDS = [
+  { id: 1, x: 136, y: 256, mask: "○" },
+  { id: 2, x: 205, y: 272, mask: "△" },
+  { id: 3, x: 336, y: 272, mask: "□" },
+  { id: 4, x: 404, y: 256, mask: "○" },
+];
 
 export class GameController {
   constructor(canvas, ui) {
@@ -34,6 +40,8 @@ export class GameController {
     this.aggressiveScan = false;
     this.aggressiveProgress = 0;
     this.dollPose = this.#computeDollPose(performance.now());
+    this.cookieStrike = null;
+    this.nextCookieAttackAt = Infinity;
 
     this.bridge = new EventBridge({
       onRoseGift: (username) => this.spawnPlayer(username),
@@ -49,6 +57,7 @@ export class GameController {
     this.roundStartAt = now;
     this.doll.start(now, this.level);
     this.vision.setLevel(this.level);
+    this.nextCookieAttackAt = now + this.#cookieAttackIntervalMs();
     this.sounds.playIdle();
     requestAnimationFrame((t) => this.#loop(t));
   }
@@ -158,6 +167,7 @@ export class GameController {
     }
 
     this.players.update(now, { isDanger: this.doll.isDanger() });
+    this.#updateCookieHazard(now);
     this.#checkGoal(now);
     this.#checkRoundTimer(now);
 
@@ -220,6 +230,8 @@ export class GameController {
     this.roundDurationMs = CONFIG.game.roundSeconds * 1000;
     this.doll.start(now, this.level);
     this.vision.setLevel(this.level);
+    this.nextCookieAttackAt = now + this.#cookieAttackIntervalMs();
+    this.cookieStrike = null;
   }
 
   #syncHud(now) {
@@ -230,7 +242,6 @@ export class GameController {
       gameState: this.doll.state === "safe" ? "safe" : "danger",
       ranking: this.ranking.topWinners(),
       monthlyWinners: this.ranking.monthlyTop(3),
-      level: this.level,
     });
   }
 
@@ -239,6 +250,7 @@ export class GameController {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.#drawField(ctx);
+    this.#drawCookieWarning(ctx, now);
     if (this.doll.isScanning()) this.#drawVisionCone(ctx, now);
     this.#drawGuards(ctx, now);
     this.#drawDoll(ctx, now);
@@ -252,6 +264,14 @@ export class GameController {
     sky.addColorStop(1, "#c6e7fb");
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.canvas.width, 320);
+    ctx.fillStyle = "rgba(240, 247, 255, 0.9)";
+    ctx.font = "900 56px 'Segoe UI', sans-serif";
+    ctx.textAlign = "center";
+    ctx.strokeStyle = "rgba(26, 43, 65, 0.55)";
+    ctx.lineWidth = 6;
+    const levelLabel = `NIVEL ${this.level}`;
+    ctx.strokeText(levelLabel, this.canvas.width / 2, 84);
+    ctx.fillText(levelLabel, this.canvas.width / 2, 84);
 
     ctx.save();
     ctx.globalAlpha = 0.5;
@@ -355,14 +375,7 @@ export class GameController {
   }
 
   #drawGuards(ctx, now) {
-    const sceneOffsetY = -22;
-    const guards = [
-      { x: 136, y: 278 + sceneOffsetY, mask: "○" },
-      { x: 205, y: 294 + sceneOffsetY, mask: "△" },
-      { x: 336, y: 294 + sceneOffsetY, mask: "□" },
-      { x: 404, y: 278 + sceneOffsetY, mask: "○" },
-    ];
-    for (const g of guards) {
+    for (const g of GUARDS) {
       const breath = Math.sin(now * 0.004 + g.x) * 1.7;
       ctx.save();
       ctx.translate(g.x, g.y + breath);
@@ -374,8 +387,104 @@ export class GameController {
       ctx.font = "bold 12px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(g.mask, 0, -35);
+      ctx.fillStyle = "#ffd166";
+      ctx.font = "bold 10px sans-serif";
+      ctx.fillText(`${g.id}`, 0, -18);
       ctx.restore();
     }
+  }
+
+  #drawCookieWarning(ctx, now) {
+    if (!this.cookieStrike) return;
+
+    const blinkOn = Math.floor(now / 260) % 2 === 0;
+    if (this.cookieStrike.state === "warning" && blinkOn) {
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 80, 80, 0.95)";
+      ctx.strokeStyle = "rgba(255, 225, 225, 0.95)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(this.cookieStrike.x, this.cookieStrike.y, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (this.cookieStrike.state === "impact") {
+      const elapsed = now - this.cookieStrike.impactAt;
+      const progress = Math.min(1, elapsed / 480);
+      const radius = 14 + progress * 54;
+      const alpha = 0.9 - progress * 0.9;
+      if (alpha <= 0) return;
+      ctx.save();
+      ctx.fillStyle = `rgba(255, 120, 36, ${alpha})`;
+      ctx.strokeStyle = `rgba(255, 236, 186, ${alpha})`;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(this.cookieStrike.x, this.cookieStrike.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  #updateCookieHazard(now) {
+    if (!this.cookieStrike && now >= this.nextCookieAttackAt) {
+      this.#startCookieStrike(now);
+    }
+    if (!this.cookieStrike) return;
+
+    if (this.cookieStrike.state === "warning" && now >= this.cookieStrike.explodeAt) {
+      this.cookieStrike.state = "impact";
+      this.cookieStrike.impactAt = now;
+      this.sounds.playCookieImpact();
+      this.#applyCookieBlast(now);
+    }
+
+    if (this.cookieStrike.state === "impact" && now - this.cookieStrike.impactAt >= 520) {
+      this.cookieStrike = null;
+    }
+  }
+
+  #startCookieStrike(now) {
+    const shuffled = [...GUARDS].sort(() => Math.random() - 0.5);
+    const candidates = shuffled.slice(0, 2);
+    const thrower = candidates[Math.floor(Math.random() * candidates.length)];
+    this.cookieStrike = {
+      guardId: thrower.id,
+      x: this.#randomBetween(68, this.canvas.width - 68),
+      y: this.#randomBetween(CONFIG.game.finishLineY + 18, CONFIG.game.startLineY - 48),
+      state: "warning",
+      createdAt: now,
+      explodeAt: now + 5000,
+      impactAt: null,
+    };
+    this.nextCookieAttackAt = now + this.#cookieAttackIntervalMs();
+    this.uiManager.announce(`Guardia ${thrower.id} lanzó galleta`, "danger");
+    this.sounds.playCookieWarning();
+  }
+
+  #applyCookieBlast(now) {
+    if (!this.cookieStrike) return;
+    const blastRadius = 54;
+    for (const p of this.players.getAlive()) {
+      const distance = Math.hypot(p.x - this.cookieStrike.x, p.y - this.cookieStrike.y);
+      if (distance > blastRadius) continue;
+      const eliminated = this.players.eliminatePlayer(p.id, now);
+      if (eliminated) {
+        this.uiManager.announce(`${eliminated.username} fue alcanzado por la galleta`, "danger");
+      }
+    }
+  }
+
+  #cookieAttackIntervalMs() {
+    const perLevelSeconds = [48, 44, 40, 36, 33, 30, 28, 25, 22, 20];
+    const index = Math.min(10, Math.max(1, this.level)) - 1;
+    return perLevelSeconds[index] * 1000;
+  }
+
+  #randomBetween(min, max) {
+    return min + Math.random() * (max - min);
   }
 
   #drawDoll(ctx, now) {
