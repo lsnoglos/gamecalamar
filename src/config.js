@@ -13,26 +13,27 @@ export const CONFIG = {
     levelProfiles: [
       {
         turnMs: 320,
-        safeMinMs: 3000,
+        safeMinMs: 2000,
         safeMaxMs: 5000,
         dangerMinMs: 1000,
         dangerMaxMs: 1800,
       },
       {
         turnMs: 280,
-        safeMinMs: 2700,
-        safeMaxMs: 4300,
+        safeMinMs: 2000,
+        safeMaxMs: 5000,
         dangerMinMs: 1000,
         dangerMaxMs: 1700,
       },
       {
         turnMs: 240,
-        safeMinMs: 2400,
-        safeMaxMs: 3800,
+        safeMinMs: 2000,
+        safeMaxMs: 5000,
         dangerMinMs: 900,
         dangerMaxMs: 1600,
       },
     ],
+    preScanDelayMs: 1000,
     cone: {
       originY: 132,
       radius: 980,

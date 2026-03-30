@@ -107,6 +107,12 @@ export class GameController {
       this.uiManager.setContextMessage("¡Se está volteando!");
     }
 
+    if (stateEvent === "dangerHold") {
+      this.uiManager.setContextMessage("¡Quietos!");
+      this.uiManager.announce("Ojos rojos...", "danger");
+      this.uiManager.setDangerMode(true);
+    }
+
     if (stateEvent === "danger") {
       this.sounds.playScan();
       this.dangerSinceAt = now;
