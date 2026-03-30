@@ -6,10 +6,10 @@ export const CONFIG = {
   game: {
     roundSeconds: 150,
     extraTimeSeconds: 35,
-    maxWinners: 3,
+    maxWinners: 10,
     startLineY: 914,
-    finishLineY: 138,
-    finishWindow: 5,
+    finishLineY: 332,
+    finishWindow: 3,
     levelProfiles: [
       {
         turnMs: 320,
