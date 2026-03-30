@@ -185,12 +185,11 @@ export class GameController {
 
   #checkGoal(now) {
     for (const p of this.players.getAlive()) {
-      if (p.y > CONFIG.game.finishLineY) continue;
-      if (p.y > CONFIG.game.finishLineY - CONFIG.game.finishWindow) continue;
+      if (p.y > CONFIG.game.finishLineY + CONFIG.game.finishWindow) continue;
       const registered = this.ranking.registerWinner(p);
       if (!registered) continue;
 
-      this.players.markWinner(p.id, registered.place, now);
+      this.players.removePlayer(p.id);
       this.sounds.playVictory();
       this.uiManager.floatingText(`¡${p.username} llegó a la meta!`, p.x, p.y - 24, "victory");
       this.uiManager.announce(`¡${p.username} llegó a la meta!`, "ok");
@@ -203,14 +202,14 @@ export class GameController {
     const elapsed = now - this.roundStartAt;
     if (elapsed < this.roundDurationMs) return;
 
-    if (!this.ranking.hasTop3() && !this.extraTimeUsed) {
+    if (!this.ranking.hasRequiredWinners() && !this.extraTimeUsed) {
       this.extraTimeUsed = true;
       this.roundDurationMs += CONFIG.game.extraTimeSeconds * 1000;
       this.uiManager.announce("Tiempo extra activado", "neutral");
       return;
     }
 
-    if (this.ranking.hasTop3()) {
+    if (this.ranking.hasRequiredWinners()) {
       this.level += 1;
       this.uiManager.announce(`Nivel ${this.level}`, "ok");
       this.players.resetRoundToStart();
@@ -234,7 +233,8 @@ export class GameController {
       timeLeft: remainSec,
       aliveCount: this.players.getAliveCount(),
       gameState: this.doll.state === "safe" ? "safe" : "danger",
-      ranking: this.ranking.top3(),
+      ranking: this.ranking.topWinners(),
+      monthlyWinners: this.ranking.monthlyTop(3),
       level: this.level,
     });
   }
@@ -337,24 +337,24 @@ export class GameController {
 
     const finishY = CONFIG.game.finishLineY;
     ctx.save();
-    ctx.shadowColor = "rgba(255, 255, 255, 0.95)";
-    ctx.shadowBlur = 12;
-    ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.fillRect(0, finishY, this.canvas.width, 5);
+    ctx.shadowColor = "rgba(255, 255, 180, 0.95)";
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = "rgba(255,255,220,0.98)";
+    ctx.fillRect(0, finishY, this.canvas.width, 7);
     ctx.restore();
 
-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.92)";
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(0, finishY - 2);
-    ctx.lineTo(this.canvas.width, finishY - 2);
+    ctx.moveTo(0, finishY - 3);
+    ctx.lineTo(this.canvas.width, finishY - 3);
     ctx.stroke();
 
-    ctx.strokeStyle = "rgba(50,50,50,0.65)";
-    ctx.setLineDash([8, 7]);
+    ctx.strokeStyle = "rgba(25,25,25,0.88)";
+    ctx.setLineDash([9, 7]);
     ctx.beginPath();
-    ctx.moveTo(0, finishY + 6);
-    ctx.lineTo(this.canvas.width, finishY + 6);
+    ctx.moveTo(0, finishY + 9);
+    ctx.lineTo(this.canvas.width, finishY + 9);
     ctx.stroke();
     ctx.setLineDash([]);
   }

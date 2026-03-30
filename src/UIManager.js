@@ -6,7 +6,7 @@ export class UIManager {
     this.lastBottomMessage = "";
   }
 
-  updateHud({ timeLeft, aliveCount, gameState, ranking, level }) {
+  updateHud({ timeLeft, aliveCount, gameState, ranking, monthlyWinners, level }) {
     this.ui.timeLeft.textContent = Math.ceil(timeLeft).toString();
     this.ui.aliveCount.textContent = aliveCount.toString();
     this.ui.levelTag.textContent = `Nivel ${level}`;
@@ -14,8 +14,24 @@ export class UIManager {
     this.ui.gameState.textContent = gameState === "safe" ? "LUZ VERDE" : "LUZ ROJA";
     this.ui.gameState.dataset.state = gameState === "safe" ? "safe" : "danger";
 
+    this.ui.rankingList.innerHTML = "";
+    for (let i = 0; i < 10; i += 1) {
+      const li = document.createElement("li");
+      const row = ranking[i];
+      if (!row) {
+        li.textContent = `${i + 1}. ${medal(i)} —`;
+      } else {
+        li.textContent = `${i + 1}. ${medal(i)} ${row.username} — ${row.wins}`;
+      }
+      this.ui.rankingList.appendChild(li);
+    }
+
+    this.ui.monthlyList.innerHTML = "";
     for (let i = 0; i < 3; i += 1) {
-      this.ui.rankingItems[i].textContent = ranking[i] ? `${medal(i)} ${ranking[i].username}` : `${medal(i)} —`;
+      const li = document.createElement("li");
+      const row = monthlyWinners[i];
+      li.textContent = row ? `${i + 1}. ${medal(i)} ${row.username} — ${row.wins}` : `${i + 1}. ${medal(i)} —`;
+      this.ui.monthlyList.appendChild(li);
     }
   }
 
@@ -74,5 +90,5 @@ export class UIManager {
 }
 
 function medal(i) {
-  return ["🥇", "🥈", "🥉"][i];
+  return ["🥇", "🥈", "🥉"][i] ?? "•";
 }

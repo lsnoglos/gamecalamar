@@ -73,6 +73,10 @@ export class PlayerManager {
     return p;
   }
 
+  removePlayer(id) {
+    this.players.delete(id);
+  }
+
   update(now, { isDanger = false } = {}) {
     for (const [id, p] of this.players.entries()) {
       if (p.bounce > 0) p.bounce = Math.max(0, p.bounce - 0.08);
@@ -86,6 +90,11 @@ export class PlayerManager {
 
       if (p.velocityY > 0) {
         p.y -= p.velocityY;
+        if (p.y <= CONFIG.game.finishLineY) {
+          p.y = CONFIG.game.finishLineY;
+          p.velocityY = 0;
+          p.pendingImpulses = [];
+        }
         if (isDanger && p.velocityY > 0.01) {
           p.movedInDanger = true;
         }

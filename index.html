@@ -23,14 +23,17 @@
       <section class="scene-layout">
         <aside class="hud-ranking">
           <div class="ranking-head">
-            <h2>TOP 3</h2>
+            <h2>Panel</h2>
             <span id="level-tag" class="level-tag">Nivel 1</span>
           </div>
-          <ol id="ranking-list">
-            <li>🥇 —</li>
-            <li>🥈 —</li>
-            <li>🥉 —</li>
-          </ol>
+          <section class="ranking-section">
+            <h3>TOP 10</h3>
+            <ol id="ranking-list"></ol>
+          </section>
+          <section class="ranking-section monthly">
+            <h3>Ganadores del mes</h3>
+            <ol id="monthly-ranking-list"></ol>
+          </section>
         </aside>
 
         <main class="game-viewport">
