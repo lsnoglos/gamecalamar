@@ -6,10 +6,9 @@ export class UIManager {
     this.lastBottomMessage = "";
   }
 
-  updateHud({ timeLeft, aliveCount, gameState, ranking, monthlyWinners, level }) {
+  updateHud({ timeLeft, aliveCount, gameState, ranking, monthlyWinners }) {
     this.ui.timeLeft.textContent = Math.ceil(timeLeft).toString();
     this.ui.aliveCount.textContent = aliveCount.toString();
-    this.ui.levelTag.textContent = `Nivel ${level}`;
 
     this.ui.gameState.textContent = gameState === "safe" ? "LUZ VERDE" : "LUZ ROJA";
     this.ui.gameState.dataset.state = gameState === "safe" ? "safe" : "danger";
@@ -42,7 +41,7 @@ export class UIManager {
   setContextMessage(message) {
     if (!message || message === this.lastBottomMessage) return;
     this.lastBottomMessage = message;
-    this.ui.gameMessage.textContent = message;
+    this.ui.rankingMessage.textContent = message;
   }
 
   announce(message, tone = "neutral") {

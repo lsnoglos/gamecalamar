@@ -4,6 +4,8 @@ const SOUND_FILES = {
   elimination: "/sonido/elimination.mp3",
   victory: "/sonido/victory.mp3",
   step: "/sonido/step.mp3",
+  cookie_warning: "/audio/cookie_warning.mp3",
+  cookie_impact: "/audio/cookie_impact.mp3",
 };
 
 export class SoundManager {
@@ -48,6 +50,18 @@ export class SoundManager {
       this.#blip(830, 0.11, "triangle", 0.05);
       this.#blip(1020, 0.1, "triangle", 0.05, 0.12);
     });
+  }
+
+  playCookieWarning() {
+    this.#play("cookie_warning", 0.5, () => {
+      this.#blip(900, 0.1, "square", 0.05);
+      this.#blip(900, 0.1, "square", 0.05, 0.18);
+      this.#blip(900, 0.1, "square", 0.05, 0.36);
+    });
+  }
+
+  playCookieImpact() {
+    this.#play("cookie_impact", 0.65, () => this.#sweep(180, 45, 0.4));
   }
 
   playIdle() {

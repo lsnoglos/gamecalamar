@@ -74,7 +74,7 @@ body {
   gap: 8px;
 }
 
-.ranking-head { display: flex; align-items: center; justify-content: space-between; }
+.ranking-head { display: flex; align-items: center; justify-content: flex-start; }
 .hud-ranking h2 { margin: 0; font-size: 22px; color: #ffd166; }
 .ranking-section h3 {
   margin: 10px 0 6px;
@@ -82,12 +82,22 @@ body {
   color: #c9e7ff;
   letter-spacing: 0.2px;
 }
-.level-tag { background: #18303f; border: 1px solid #53778e; border-radius: 999px; padding: 5px 10px; font-weight: 800; }
 .hud-ranking ol { margin: 6px 0 0; padding-left: 22px; font-size: 15px; line-height: 1.45; font-weight: 700; }
 .ranking-section.monthly {
   border-top: 1px solid rgba(134, 176, 202, 0.35);
   margin-top: 8px;
   padding-top: 4px;
+}
+
+.ranking-message {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  background: rgba(2, 7, 12, 0.72);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  padding: 10px 8px;
 }
 
 .game-viewport {
@@ -133,20 +143,6 @@ body {
   100% { opacity: 0; }
 }
 
-.game-message {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 12px;
-  text-align: center;
-  font-size: 24px;
-  font-weight: 800;
-  background: rgba(2, 7, 12, 0.72);
-  border: 2px solid rgba(255, 255, 255, 0.32);
-  border-radius: 10px;
-  padding: 8px 6px;
-}
-
 .float-layer { position: absolute; inset: 0; pointer-events: none; }
 .floating-text {
   position: absolute;
@@ -177,7 +173,7 @@ button {
 
 @media (max-height: 820px) {
   .hud-ranking ol { font-size: 14px; }
-  .game-message, .alert-text { font-size: 20px; }
+  .ranking-message, .alert-text { font-size: 16px; }
 }
 
 @media (max-width: 560px) {
