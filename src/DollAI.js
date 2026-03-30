@@ -2,7 +2,7 @@ import { CONFIG } from "./config.js";
 
 export class DollAI {
   constructor() {
-    this.state = "safe"; // safe | turn | danger
+    this.state = "safe"; // safe | turn | dangerHold | danger
     this.stateUntil = 0;
     this.level = 1;
     this.rotation = Math.PI;
@@ -27,6 +27,13 @@ export class DollAI {
     }
 
     if (this.state === "turn") {
+      this.state = "dangerHold";
+      this.rotation = 0;
+      this.stateUntil = now + CONFIG.game.preScanDelayMs;
+      return "dangerHold";
+    }
+
+    if (this.state === "dangerHold") {
       this.#setDanger(now);
       return "danger";
     }
@@ -50,7 +57,7 @@ export class DollAI {
   }
 
   isDanger() {
-    return this.state === "danger" || this.state === "turn";
+    return this.state === "danger" || this.state === "turn" || this.state === "dangerHold";
   }
 
   isScanning() {

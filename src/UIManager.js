@@ -19,9 +19,9 @@ export class UIManager {
       const li = document.createElement("li");
       const row = ranking[i];
       if (!row) {
-        li.textContent = `${i + 1}. ${medal(i)} —`;
+        li.textContent = "—";
       } else {
-        li.textContent = `${i + 1}. ${medal(i)} ${row.username} — ${row.wins}`;
+        li.textContent = `${truncateName(row.username)} ${row.wins}`;
       }
       this.ui.rankingList.appendChild(li);
     }
@@ -30,7 +30,7 @@ export class UIManager {
     for (let i = 0; i < 3; i += 1) {
       const li = document.createElement("li");
       const row = monthlyWinners[i];
-      li.textContent = row ? `${i + 1}. ${medal(i)} ${row.username} — ${row.wins}` : `${i + 1}. ${medal(i)} —`;
+      li.textContent = row ? `${truncateName(row.username)} ${row.wins}` : "—";
       this.ui.monthlyList.appendChild(li);
     }
   }
@@ -89,6 +89,7 @@ export class UIManager {
   }
 }
 
-function medal(i) {
-  return ["🥇", "🥈", "🥉"][i] ?? "•";
+function truncateName(name, max = 10) {
+  if (name.length <= max) return name;
+  return `${name.slice(0, Math.max(3, max - 3))}...`;
 }
