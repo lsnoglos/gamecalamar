@@ -27,7 +27,6 @@ export class GameController {
     this.level = 1;
     this.roundStartAt = performance.now();
     this.roundDurationMs = CONFIG.game.roundSeconds * 1000;
-    this.extraTimeUsed = false;
     this.autoTap = false;
     this.nextAutoTapAt = performance.now();
     this.autoTapInterval = 320;
@@ -208,27 +207,17 @@ export class GameController {
     const elapsed = now - this.roundStartAt;
     if (elapsed < this.roundDurationMs) return;
 
-    if (!this.ranking.hasRequiredWinners() && !this.extraTimeUsed) {
-      this.extraTimeUsed = true;
-      this.roundDurationMs += CONFIG.game.extraTimeSeconds * 1000;
-      this.uiManager.announce("Tiempo extra activado", "neutral");
-      return;
-    }
-
-    if (this.ranking.hasRequiredWinners()) {
+    if (this.ranking.hasDailyPlacementsToday()) {
       this.level += 1;
       this.uiManager.announce(`Nivel ${this.level}`, "ok");
-      this.players.resetRoundToStart();
     } else {
-      this.level = 1;
-      this.players.clearAll();
-      this.uiManager.announce("Ronda terminada: reinicio", "neutral");
+      this.uiManager.announce("Sin ganadores hoy: nivel sin cambios", "neutral");
     }
 
+    this.players.resetRoundToStart();
     this.ranking.reset();
     this.roundStartAt = now;
     this.roundDurationMs = CONFIG.game.roundSeconds * 1000;
-    this.extraTimeUsed = false;
     this.doll.start(now, this.level);
     this.vision.setLevel(this.level);
   }
