@@ -12,6 +12,7 @@ const ui = {
   aliveCount: document.getElementById("alive-count"),
   rankingList: document.getElementById("ranking-list"),
   monthlyList: document.getElementById("monthly-ranking-list"),
+  playBtn: document.getElementById("play-btn"),
   spawnBtn: document.getElementById("spawn-btn"),
   tapBtn: document.getElementById("tap-btn"),
   autoTapBtn: document.getElementById("auto-tap-btn"),

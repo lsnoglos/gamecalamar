@@ -1,6 +1,7 @@
 export class EventBridge {
-  constructor({ onRoseGift, onTap }) {
-    this.onRoseGift = onRoseGift;
+  constructor({ onJoinCommand, onGift, onTap }) {
+    this.onJoinCommand = onJoinCommand;
+    this.onGift = onGift;
     this.onTap = onTap;
   }
 
@@ -9,9 +10,12 @@ export class EventBridge {
       receiveGift: (payload) => {
         const username = payload?.username ?? `user_${Math.floor(Math.random() * 9999)}`;
         const gift = payload?.gift ?? "rose";
-        if (gift.toLowerCase() === "rose") {
-          this.onRoseGift(username);
-        }
+        this.onGift(username, gift.toLowerCase());
+      },
+      receiveChat: (payload) => {
+        const username = payload?.username ?? `user_${Math.floor(Math.random() * 9999)}`;
+        const message = (payload?.message ?? "").trim().toLowerCase();
+        if (message === "jugar") this.onJoinCommand(username);
       },
       receiveTap: (payload) => {
         if (payload?.username) {

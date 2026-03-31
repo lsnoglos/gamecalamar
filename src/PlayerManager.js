@@ -16,6 +16,7 @@ export class PlayerManager {
       startY: CONFIG.game.startLineY,
       color: randomPaletteColor(),
       state: "alive", // alive | eliminated | winner | ranking
+      shields: 0,
       lastMoveAt: 0,
       movedInDanger: false,
       eliminatedAt: 0,
@@ -54,13 +55,17 @@ export class PlayerManager {
     return moved;
   }
 
-  eliminatePlayer(id, now) {
+  eliminatePlayer(id, now, { bypassShield = false } = {}) {
     const p = this.players.get(id);
     if (!p || p.state !== "alive") return null;
+    if (!bypassShield && p.shields > 0) {
+      p.shields -= 1;
+      return { player: p, blockedByShield: true };
+    }
     p.state = "eliminated";
     p.eliminatedAt = now;
     p.explosionParticles = createExplosionParticles();
-    return p;
+    return { player: p, blockedByShield: false };
   }
 
   markWinner(id, place, now) {
@@ -77,10 +82,11 @@ export class PlayerManager {
     this.players.delete(id);
   }
 
-  update(now, { isDanger = false } = {}) {
+  update(now, { isDanger = false, freezeExcept = null } = {}) {
     for (const [id, p] of this.players.entries()) {
+      const frozen = freezeExcept && p.username !== freezeExcept;
       if (p.bounce > 0) p.bounce = Math.max(0, p.bounce - 0.08);
-      while (p.pendingImpulses.length > 0 && p.pendingImpulses[0].dueAt <= now) {
+      while (!frozen && p.pendingImpulses.length > 0 && p.pendingImpulses[0].dueAt <= now) {
         const impulse = p.pendingImpulses.shift();
         p.velocityY += CONFIG.player.speedPerTap;
         p.lastMoveAt = now;
@@ -88,7 +94,7 @@ export class PlayerManager {
         if (impulse?.danger) p.movedInDanger = true;
       }
 
-      if (p.velocityY > 0) {
+      if (!frozen && p.velocityY > 0) {
         p.y -= p.velocityY;
         if (p.y <= CONFIG.game.finishLineY) {
           p.y = CONFIG.game.finishLineY;
@@ -141,6 +147,17 @@ export class PlayerManager {
 
   clearAll() {
     this.players.clear();
+  }
+
+  addShieldByUsername(username, amount) {
+    const p = this.getAliveByUsername(username);
+    if (!p) return null;
+    p.shields += amount;
+    return p;
+  }
+
+  getAliveByUsername(username) {
+    return this.getAlive().find((p) => p.username.toLowerCase() === username.toLowerCase()) ?? null;
   }
 
   getAll() {

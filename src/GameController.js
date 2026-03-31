@@ -10,10 +10,10 @@ import { ChatSystem } from "./ChatSystem.js";
 
 const USER_POOL = ["NinjaFox", "LunaTap", "PixelRosa", "NeoKoi", "MayaRush", "TicoLive", "RexArcade", "YukiStar"];
 const GUARDS = [
-  { id: 1, x: 136, y: 256, mask: "○" },
-  { id: 2, x: 205, y: 272, mask: "△" },
-  { id: 3, x: 336, y: 272, mask: "□" },
-  { id: 4, x: 404, y: 256, mask: "○" },
+  { id: 1, x: 108, y: 256, mask: "○" },
+  { id: 2, x: 188, y: 272, mask: "△" },
+  { id: 3, x: 352, y: 272, mask: "□" },
+  { id: 4, x: 432, y: 256, mask: "○" },
 ];
 
 export class GameController {
@@ -42,9 +42,12 @@ export class GameController {
     this.dollPose = this.#computeDollPose(performance.now());
     this.cookieStrike = null;
     this.nextCookieAttackAt = Infinity;
+    this.effect = null;
+    this.lastFrameAt = performance.now();
 
     this.bridge = new EventBridge({
-      onRoseGift: (username) => this.spawnPlayer(username),
+      onJoinCommand: (username) => this.spawnPlayer(username),
+      onGift: (username, gift) => this.handleGift(username, gift),
       onTap: (username) => this.handleTap(username),
     });
     this.bridge.connectGlobalBridge();
@@ -65,9 +68,32 @@ export class GameController {
   spawnPlayer(username) {
     this.sounds.enable();
     const name = username ?? `${USER_POOL[Math.floor(Math.random() * USER_POOL.length)]}${Math.floor(Math.random() * 90 + 10)}`;
+    if (this.players.getAliveByUsername(name)) {
+      this.uiManager.announce(`${name} ya está jugando`, "neutral");
+      return;
+    }
     this.players.addPlayer(name);
     this.uiManager.announce(`${name} entró al juego`, "ok");
     this.chat.sendChatMessage("Nuevo jugador ha entrado al juego");
+  }
+
+  handleGift(username, gift) {
+    this.sounds.enable();
+    const normalized = (gift ?? "").toLowerCase();
+    if (normalized === "rose" || normalized === "rosa") {
+      const p = this.players.addShieldByUsername(username, 1);
+      if (p) this.uiManager.announce(`🌹 +1 escudo para ${username} (${p.shields})`, "ok");
+      return;
+    }
+    if (normalized === "donut" || normalized === "dona") {
+      const p = this.players.addShieldByUsername(username, 5);
+      if (p) this.uiManager.announce(`🍩 +5 escudos para ${username} (${p.shields})`, "ok");
+      return;
+    }
+    if (normalized === "dance") this.#activateEffect("dance", 20000, username);
+    if (normalized === "freeze") this.#activateEffect("freeze", 10000, username);
+    if (normalized === "pause") this.#activateEffect("pause", 20000, username);
+    if (normalized === "mass") this.#massExplosion(username);
   }
 
   handleTap(username) {
@@ -76,6 +102,8 @@ export class GameController {
     const isDanger = this.doll.isDanger();
 
     if (username) {
+      if (this.effect?.type === "freeze" && this.effect.actor !== username) return;
+      if (this.effect?.type === "pause" || this.effect?.type === "dance") return;
       const candidate = this.players.getAll().find((p) => p.username === username);
       if (candidate && this.players.applyTap(candidate.id, now, isDanger)) {
         this.sounds.playStep();
@@ -84,6 +112,7 @@ export class GameController {
       return;
     }
 
+    if ((this.effect?.type === "pause") || (this.effect?.type === "dance") || (this.effect?.type === "freeze")) return;
     if (this.players.applyGlobalTap(now, isDanger)) {
       this.sounds.playStep();
       if (isDanger) {
@@ -95,6 +124,7 @@ export class GameController {
   }
 
   #wireUI() {
+    this.ui.playBtn.addEventListener("click", () => this.spawnPlayer("lsnoglos"));
     this.ui.spawnBtn.addEventListener("click", () => this.spawnPlayer());
     this.ui.tapBtn.addEventListener("mousedown", () => this.handleTap());
     this.ui.tapBtn.addEventListener("touchstart", () => this.handleTap(), { passive: true });
@@ -106,7 +136,25 @@ export class GameController {
   }
 
   #loop(now) {
-    const stateEvent = this.doll.update(now);
+    const delta = now - this.lastFrameAt;
+    this.lastFrameAt = now;
+    const locked = this.effect && now < this.effect.endsAt;
+    if (locked) {
+      this.roundStartAt += delta;
+      this.doll.shiftTime(delta);
+      if (this.cookieStrike) {
+        this.cookieStrike.explodeAt += delta;
+        if (this.cookieStrike.impactAt) this.cookieStrike.impactAt += delta;
+      }
+      this.uiManager.setContextMessage(`${this.#effectLabel()} ${Math.ceil((this.effect.endsAt - now) / 1000)}s`);
+    }
+    if (this.effect && now >= this.effect.endsAt) {
+      this.uiManager.announce("Efecto finalizado", "neutral");
+      this.effect = null;
+      this.sounds.stopDance();
+    }
+
+    const stateEvent = locked ? null : this.doll.update(now);
 
     if (stateEvent === "turn") {
       this.sounds.playTurn();
@@ -166,10 +214,13 @@ export class GameController {
       this.nextAutoTapAt = now + this.autoTapInterval;
     }
 
-    this.players.update(now, { isDanger: this.doll.isDanger() });
-    this.#updateCookieHazard(now);
+    this.players.update(now, {
+      isDanger: this.doll.isDanger(),
+      freezeExcept: this.effect?.type === "freeze" ? this.effect.actor : this.effect ? "__none__" : null,
+    });
+    if (!locked) this.#updateCookieHazard(now);
     this.#checkGoal(now);
-    this.#checkRoundTimer(now);
+    if (!locked) this.#checkRoundTimer(now);
 
     this.uiManager.rotateBottomMessage(now);
     this.#syncHud(now);
@@ -188,10 +239,12 @@ export class GameController {
       const inCriticalZone = mover.y <= criticalY;
       if (inCriticalZone || this.vision.isPointInside({ x: mover.x, y: mover.y })) {
         const eliminated = this.players.eliminatePlayer(mover.id, now);
-        if (eliminated) {
+        if (eliminated?.blockedByShield) {
+          this.uiManager.announce(`🛡️ ${mover.username} bloqueó el disparo`, "ok");
+        } else if (eliminated?.player) {
           this.sounds.playElimination();
-          this.uiManager.announce(`${eliminated.username} eliminado`, "danger");
-          this.chat.sendChatMessage(`${eliminated.username} salió del juego 💀 envía una rosa para entrar`);
+          this.uiManager.announce(`${eliminated.player.username} eliminado`, "danger");
+          this.chat.sendChatMessage(`${eliminated.player.username} salió del juego 💀 escribe jugar para volver`);
         }
       }
     }
@@ -204,9 +257,12 @@ export class GameController {
       const registered = this.ranking.registerWinner(p);
       if (!registered) continue;
 
-      this.players.removePlayer(p.id);
+      const goalY = p.y;
+      p.y = CONFIG.game.startLineY;
+      p.velocityY = 0;
+      p.pendingImpulses = [];
       this.sounds.playVictory();
-      this.uiManager.floatingText(`¡${p.username} llegó a la meta!`, p.x, p.y - 24, "victory");
+      this.uiManager.floatingText(`¡${p.username} llegó a la meta!`, p.x, goalY - 24, "victory");
       this.uiManager.announce(`¡${p.username} llegó a la meta!`, "ok");
       this.uiManager.triggerTurnFX();
       this.chat.sendChatMessage(`${p.username} llegó a la meta 🏁 ${registered.place}er lugar`);
@@ -217,14 +273,13 @@ export class GameController {
     const elapsed = now - this.roundStartAt;
     if (elapsed < this.roundDurationMs) return;
 
-    if (this.ranking.hasDailyPlacementsToday()) {
+    if (this.players.getAliveCount() > 0) {
       this.level += 1;
       this.uiManager.announce(`Nivel ${this.level}`, "ok");
     } else {
-      this.uiManager.announce("Sin ganadores hoy: nivel sin cambios", "neutral");
+      this.uiManager.announce("Sin jugadores en campo: nivel sin cambios", "neutral");
     }
 
-    this.players.resetRoundToStart();
     this.ranking.reset();
     this.roundStartAt = now;
     this.roundDurationMs = CONFIG.game.roundSeconds * 1000;
@@ -377,10 +432,19 @@ export class GameController {
   #drawGuards(ctx, now) {
     for (const g of GUARDS) {
       const breath = Math.sin(now * 0.004 + g.x) * 1.7;
+      const throwing = this.cookieStrike?.guardId === g.id && this.cookieStrike.state === "throw";
       ctx.save();
       ctx.translate(g.x, g.y + breath);
       ctx.fillStyle = "#cc2d44";
       ctx.fillRect(-11, -33, 22, 45);
+      ctx.strokeStyle = "#1b1117";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-11, -18);
+      ctx.lineTo(-22, throwing ? -50 : -8);
+      ctx.moveTo(11, -18);
+      ctx.lineTo(22, -8);
+      ctx.stroke();
       ctx.fillStyle = "#1a1518";
       ctx.fillRect(-10, -48, 20, 17);
       ctx.fillStyle = "#f3f3f3";
@@ -398,6 +462,23 @@ export class GameController {
     if (!this.cookieStrike) return;
 
     const blinkOn = Math.floor(now / 260) % 2 === 0;
+    if (this.cookieStrike.state === "throw") {
+      const progress = Math.min(1, (now - this.cookieStrike.createdAt) / 900);
+      const startX = this.cookieStrike.throwStart.x;
+      const startY = this.cookieStrike.throwStart.y;
+      const endX = this.cookieStrike.x;
+      const endY = this.cookieStrike.y;
+      const arcLift = Math.sin(progress * Math.PI) * 120;
+      const bx = startX + (endX - startX) * progress;
+      const by = startY + (endY - startY) * progress - arcLift;
+      ctx.save();
+      ctx.fillStyle = "#ff3030";
+      ctx.beginPath();
+      ctx.arc(bx, by, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     if (this.cookieStrike.state === "warning" && blinkOn) {
       ctx.save();
       ctx.fillStyle = "rgba(255, 80, 80, 0.95)";
@@ -413,7 +494,7 @@ export class GameController {
     if (this.cookieStrike.state === "impact") {
       const elapsed = now - this.cookieStrike.impactAt;
       const progress = Math.min(1, elapsed / 480);
-      const radius = 14 + progress * 54;
+      const radius = 10 + progress * 20;
       const alpha = 0.9 - progress * 0.9;
       if (alpha <= 0) return;
       ctx.save();
@@ -433,6 +514,11 @@ export class GameController {
       this.#startCookieStrike(now);
     }
     if (!this.cookieStrike) return;
+
+    if (this.cookieStrike.state === "throw" && now - this.cookieStrike.createdAt >= 900) {
+      this.cookieStrike.state = "warning";
+      this.cookieStrike.explodeAt = now + 2200;
+    }
 
     if (this.cookieStrike.state === "warning" && now >= this.cookieStrike.explodeAt) {
       this.cookieStrike.state = "impact";
@@ -455,10 +541,12 @@ export class GameController {
       x: this.#randomBetween(68, this.canvas.width - 68),
       y: this.#randomBetween(CONFIG.game.finishLineY + 18, CONFIG.game.startLineY - 48),
       state: "warning",
+      throwStart: { x: thrower.x, y: thrower.y - 42 },
       createdAt: now,
-      explodeAt: now + 5000,
+      explodeAt: now + 2200,
       impactAt: null,
     };
+    this.cookieStrike.state = "throw";
     this.nextCookieAttackAt = now + this.#cookieAttackIntervalMs();
     this.uiManager.announce(`Guardia ${thrower.id} lanzó galleta`, "danger");
     this.sounds.playCookieWarning();
@@ -466,13 +554,15 @@ export class GameController {
 
   #applyCookieBlast(now) {
     if (!this.cookieStrike) return;
-    const blastRadius = 54;
+    const blastRadius = 10;
     for (const p of this.players.getAlive()) {
       const distance = Math.hypot(p.x - this.cookieStrike.x, p.y - this.cookieStrike.y);
       if (distance > blastRadius) continue;
       const eliminated = this.players.eliminatePlayer(p.id, now);
-      if (eliminated) {
-        this.uiManager.announce(`${eliminated.username} fue alcanzado por la galleta`, "danger");
+      if (eliminated?.blockedByShield) {
+        this.uiManager.announce(`🛡️ ${p.username} resistió la bola`, "ok");
+      } else if (eliminated?.player) {
+        this.uiManager.announce(`${eliminated.player.username} fue alcanzado por la bola`, "danger");
       }
     }
   }
@@ -485,6 +575,40 @@ export class GameController {
 
   #randomBetween(min, max) {
     return min + Math.random() * (max - min);
+  }
+
+  #activateEffect(type, durationMs, actor) {
+    this.effect = {
+      type,
+      actor,
+      endsAt: performance.now() + durationMs,
+    };
+    if (type === "dance") {
+      this.uiManager.announce("💃 La muñeca se puso a bailar", "ok");
+      this.sounds.playDance();
+    }
+    if (type === "freeze") this.uiManager.announce(`❄️ Tiempo detenido por ${actor}`, "danger");
+    if (type === "pause") this.uiManager.announce("⏸️ Juego en pausa", "neutral");
+  }
+
+  #massExplosion(actor) {
+    const now = performance.now();
+    for (const p of this.players.getAlive()) {
+      if (p.username === actor) continue;
+      p.y = CONFIG.game.startLineY;
+      p.velocityY = 0;
+      p.pendingImpulses = [];
+      this.uiManager.floatingText("💥", p.x, p.y - 18, "danger");
+    }
+    this.uiManager.announce(`💥 Explosión masiva por ${actor}`, "danger");
+  }
+
+  #effectLabel() {
+    if (!this.effect) return "";
+    if (this.effect.type === "dance") return "Baile";
+    if (this.effect.type === "freeze") return "Tiempo detenido";
+    if (this.effect.type === "pause") return "Pausa";
+    return "Efecto";
   }
 
   #drawDoll(ctx, now) {
@@ -643,11 +767,20 @@ export class GameController {
   #computeDollPose(now) {
     const x = this.canvas.width / 2;
     const y = 264;
-    const bob = this.doll.state === "safe" ? Math.sin(now * 0.006) * 1.4 : 0;
+    const dancing = this.effect?.type === "dance";
+    const bob = dancing ? Math.sin(now * 0.018) * 8 : this.doll.state === "safe" ? Math.sin(now * 0.006) * 1.4 : 0;
     const turnP = this.doll.turnProgress(now);
     const scanning = this.doll.isScanning();
     const scanHeadRotation = this.vision.getDirection() - Math.PI / 2;
-    const headRotation = this.doll.state === "turn" ? Math.PI - turnP * Math.PI : scanning ? scanHeadRotation : this.doll.state === "safe" ? Math.PI : 0;
+    const headRotation = dancing
+      ? Math.PI + Math.sin(now * 0.02) * 0.7
+      : this.doll.state === "turn"
+        ? Math.PI - turnP * Math.PI
+        : scanning
+          ? scanHeadRotation
+          : this.doll.state === "safe"
+            ? Math.PI
+            : 0;
     const frontVisible = Math.max(0, Math.cos(headRotation));
     const cos = Math.cos(headRotation);
     const sin = Math.sin(headRotation);
@@ -698,24 +831,24 @@ export class GameController {
         }
       }
 
-      const bodyColor = p.state === "eliminated" ? "#ff3b3b" : p.color;
-      ctx.strokeStyle = bodyColor;
-      ctx.fillStyle = bodyColor;
-      ctx.lineWidth = 3;
+      const suitColor = p.state === "eliminated" ? "#ff3b3b" : "#0e8f64";
+      ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.arc(0, -14, 7, 0, Math.PI * 2);
+      ctx.arc(0, -15, 7, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = suitColor;
+      ctx.fillRect(-7, -8, 14, 20);
+      ctx.strokeStyle = "#f3f3f3";
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(0, -7);
-      ctx.lineTo(0, 14);
-      ctx.moveTo(0, 0);
-      ctx.lineTo(-9, 9);
-      ctx.moveTo(0, 0);
-      ctx.lineTo(9, 9);
-      ctx.moveTo(0, 14);
-      ctx.lineTo(-7, 26);
-      ctx.moveTo(0, 14);
-      ctx.lineTo(7, 26);
+      ctx.moveTo(-7, -8);
+      ctx.lineTo(-11, 7);
+      ctx.moveTo(7, -8);
+      ctx.lineTo(11, 7);
+      ctx.moveTo(-4, 12);
+      ctx.lineTo(-4, 26);
+      ctx.moveTo(4, 12);
+      ctx.lineTo(4, 26);
       ctx.stroke();
 
       if (highlighted) {
@@ -737,6 +870,11 @@ export class GameController {
       ctx.strokeText(p.username, p.x, p.y - 28);
       ctx.fillStyle = highlighted ? "#ffd7d7" : "#fff";
       ctx.fillText(p.username, p.x, p.y - 28);
+      if (p.shields > 0 && p.state === "alive") {
+        ctx.fillStyle = "#9cecff";
+        ctx.font = "bold 13px sans-serif";
+        ctx.fillText(`🛡️${p.shields}`, p.x, p.y - 42);
+      }
     }
   }
 }
