@@ -6,12 +6,13 @@ export class UIManager {
     this.lastBottomMessage = "";
   }
 
-  updateHud({ timeLeft, aliveCount, gameState, ranking, monthlyWinners }) {
+  updateHud({ timeLeft, aliveCount, gameState, ranking, monthlyWinners, level }) {
     this.ui.timeLeft.textContent = Math.ceil(timeLeft).toString();
     this.ui.aliveCount.textContent = aliveCount.toString();
 
     this.ui.gameState.textContent = gameState === "safe" ? "LUZ VERDE" : "LUZ ROJA";
     this.ui.gameState.dataset.state = gameState === "safe" ? "safe" : "danger";
+    this.ui.levelLabel.textContent = `Nivel ${level}`;
 
     this.ui.rankingList.innerHTML = "";
     for (let i = 0; i < 10; i += 1) {

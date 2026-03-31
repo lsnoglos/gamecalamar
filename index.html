@@ -34,9 +34,14 @@
             <ol id="monthly-ranking-list"></ol>
           </section>
           <div class="ranking-message" id="ranking-message">Corre… ahora…</div>
+          <div class="join-tip">Escribe <strong>Jugar</strong> para unirte al juego.</div>
         </aside>
 
         <main class="game-viewport">
+          <div class="level-badge" id="level-badge">
+            <span class="level-pyramid" aria-hidden="true">▲</span>
+            <strong id="level-label">Nivel 1</strong>
+          </div>
           <canvas id="game-canvas" width="540" height="960"></canvas>
           <div class="flash" id="flash-overlay"></div>
           <div class="float-layer" id="float-layer"></div>
@@ -47,14 +52,14 @@
       <footer class="control-panel">
         <div class="gift-list">
           <strong>Regalos</strong>
-          <ul>
-            <li>🌹 Rosa: +1 escudo</li>
-            <li>🍩 Dona: +5 escudos</li>
-            <li>💃 Regalo grande: baile de muñeca (20s)</li>
-            <li>❄️ Regalo grande: detener tiempo (10s, solo avanza quien paga)</li>
-            <li>⏸️ Regalo: pausar partida (20s)</li>
-            <li>💥 Regalo: explosión masiva (menos quien paga)</li>
-          </ul>
+          <div class="gift-buttons">
+            <button class="gift-btn" data-gift="rosa">🌹 Rosa (+1)</button>
+            <button class="gift-btn" data-gift="dona">🍩 Dona (+5)</button>
+            <button class="gift-btn" data-gift="dance">💃 Baile (20s)</button>
+            <button class="gift-btn" data-gift="freeze">❄️ Congelar (10s)</button>
+            <button class="gift-btn" data-gift="pause">⏸️ Pausa (20s)</button>
+            <button class="gift-btn" data-gift="mass">💥 Explosión</button>
+          </div>
         </div>
         <div class="test-controls">
           <button id="play-btn" class="mini-btn">▶</button>

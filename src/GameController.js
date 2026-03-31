@@ -133,6 +133,14 @@ export class GameController {
       this.ui.autoTapBtn.textContent = `Auto Tap: ${this.autoTap ? "ON" : "OFF"}`;
       this.uiManager.announce(this.autoTap ? "Auto Tap activado" : "Auto Tap desactivado", "neutral");
     });
+
+    for (const giftBtn of this.ui.giftButtons) {
+      giftBtn.addEventListener("click", () => {
+        const gift = giftBtn.dataset.gift;
+        this.handleGift("lsnoglos", gift);
+        this.uiManager.announce(`Regalo activado: ${gift}`, "ok");
+      });
+    }
   }
 
   #loop(now) {
@@ -297,6 +305,7 @@ export class GameController {
       gameState: this.doll.state === "safe" ? "safe" : "danger",
       ranking: this.ranking.topWinners(),
       monthlyWinners: this.ranking.monthlyTop(3),
+      level: this.level,
     });
   }
 
@@ -331,36 +340,25 @@ export class GameController {
     ctx.save();
     ctx.globalAlpha = 0.5;
 
-    ctx.fillStyle = "rgba(63, 48, 36, 0.32)";
+    ctx.fillStyle = "rgba(63, 48, 36, 0.2)";
     ctx.beginPath();
-    ctx.ellipse(270, 245 + sceneOffsetY, 102, 24, 0, 0, Math.PI * 2);
+    ctx.ellipse(270, 246 + sceneOffsetY, 112, 22, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const trunk = new Path2D();
-    trunk.moveTo(240, 250 + sceneOffsetY);
-    trunk.bezierCurveTo(220, 210 + sceneOffsetY, 228, 170 + sceneOffsetY, 246, 132 + sceneOffsetY);
-    trunk.bezierCurveTo(257, 112 + sceneOffsetY, 254, 90 + sceneOffsetY, 268, 72 + sceneOffsetY);
-    trunk.bezierCurveTo(284, 94 + sceneOffsetY, 286, 120 + sceneOffsetY, 296, 146 + sceneOffsetY);
-    trunk.bezierCurveTo(308, 182 + sceneOffsetY, 318, 214 + sceneOffsetY, 300, 250 + sceneOffsetY);
-    trunk.closePath();
-    const trunkPaint = ctx.createLinearGradient(232, 74 + sceneOffsetY, 302, 250 + sceneOffsetY);
-    trunkPaint.addColorStop(0, "#86624c");
-    trunkPaint.addColorStop(0.45, "#a0785b");
-    trunkPaint.addColorStop(1, "#755744");
-    ctx.fillStyle = trunkPaint;
-    ctx.fill(trunk);
-
-    ctx.strokeStyle = "#785843";
-    ctx.lineWidth = 11;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(268, 104 + sceneOffsetY);
-    ctx.quadraticCurveTo(210, 78 + sceneOffsetY, 156, 46 + sceneOffsetY);
-    ctx.moveTo(273, 98 + sceneOffsetY);
-    ctx.quadraticCurveTo(330, 78 + sceneOffsetY, 386, 48 + sceneOffsetY);
-    ctx.moveTo(264, 128 + sceneOffsetY);
-    ctx.quadraticCurveTo(220, 120 + sceneOffsetY, 176, 100 + sceneOffsetY);
-    ctx.stroke();
+    const pyramid = new Path2D();
+    pyramid.moveTo(268, 76 + sceneOffsetY);
+    pyramid.lineTo(172, 246 + sceneOffsetY);
+    pyramid.lineTo(364, 246 + sceneOffsetY);
+    pyramid.closePath();
+    const pyramidPaint = ctx.createLinearGradient(176, 84 + sceneOffsetY, 360, 246 + sceneOffsetY);
+    pyramidPaint.addColorStop(0, "rgba(255, 223, 138, 0.5)");
+    pyramidPaint.addColorStop(0.5, "rgba(220, 177, 95, 0.4)");
+    pyramidPaint.addColorStop(1, "rgba(160, 118, 64, 0.45)");
+    ctx.fillStyle = pyramidPaint;
+    ctx.fill(pyramid);
+    ctx.strokeStyle = "rgba(133, 98, 56, 0.62)";
+    ctx.lineWidth = 5;
+    ctx.stroke(pyramid);
     ctx.restore();
 
     ctx.fillStyle = "#f9f9f2";
