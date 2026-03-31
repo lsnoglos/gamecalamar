@@ -14,6 +14,7 @@ export class SoundManager {
     this.ctx = null;
     this.bank = new Map();
     this.idleLoop = null;
+    this.danceLoop = null;
 
     Object.entries(SOUND_FILES).forEach(([name, src]) => {
       const audio = new Audio(src);
@@ -80,6 +81,22 @@ export class SoundManager {
     this.idleLoop.pause();
     this.idleLoop.currentTime = 0;
     this.idleLoop = null;
+  }
+
+  playDance() {
+    if (!this.enabled || this.danceLoop) return;
+    this.stopIdle();
+    this.danceLoop = setInterval(() => {
+      this.#blip(520, 0.12, "square", 0.04);
+      this.#blip(660, 0.1, "triangle", 0.03, 0.11);
+      this.#blip(780, 0.08, "triangle", 0.025, 0.2);
+    }, 380);
+  }
+
+  stopDance() {
+    if (!this.danceLoop) return;
+    clearInterval(this.danceLoop);
+    this.danceLoop = null;
   }
 
   #play(name, volume = 0.5, fallback = null) {

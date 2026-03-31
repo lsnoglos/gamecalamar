@@ -42,6 +42,11 @@ export class DollAI {
     return "safe";
   }
 
+  shiftTime(deltaMs) {
+    this.stateUntil += deltaMs;
+    this.turnStartAt += deltaMs;
+  }
+
   #setSafe(now) {
     this.state = "safe";
     this.rotation = Math.PI;

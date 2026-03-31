@@ -16,7 +16,6 @@ export class RankingSystem {
   }
 
   registerWinner(player) {
-    if (this.winners.some((w) => w.id === player.id)) return null;
     this.#ensureDayBoundary();
     this.#ensureMonthBoundary();
 
