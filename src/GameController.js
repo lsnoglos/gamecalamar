@@ -90,7 +90,7 @@ export class GameController {
       if (p) this.uiManager.announce(`🍩 +5 escudos para ${username} (${p.shields})`, "ok");
       return;
     }
-    if (normalized === "dance") this.#activateEffect("dance", 60000, username);
+    if (normalized === "dance") this.#activateEffect("dance", 25000, username);
     if (normalized === "freeze") this.#activateEffect("freeze", 10000, username);
     if (normalized === "pause") this.#activateEffect("pause", 20000, username);
     if (normalized === "mass") this.#massExplosion(username);
@@ -323,13 +323,16 @@ export class GameController {
 
   #drawField(ctx, now) {
     const sceneOffsetY = -22;
-    const danceActive = this.effect?.type === "dance";
+    const danceState = this.#getDanceState(now);
+    const danceActive = danceState.active;
+    const danceMix = danceState.colorMix;
     const discoPhase = now * 0.004;
     const sky = ctx.createLinearGradient(0, 0, 0, 310);
     if (danceActive) {
-      sky.addColorStop(0, `hsl(${(discoPhase * 95) % 360} 90% 62%)`);
-      sky.addColorStop(0.5, `hsl(${(discoPhase * 95 + 70) % 360} 88% 58%)`);
-      sky.addColorStop(1, `hsl(${(discoPhase * 95 + 150) % 360} 86% 52%)`);
+      const sat = 24 + danceMix * 66;
+      sky.addColorStop(0, `hsl(${(discoPhase * 95) % 360} ${sat}% ${77 - danceMix * 15}%)`);
+      sky.addColorStop(0.5, `hsl(${(discoPhase * 95 + 70) % 360} ${sat}% ${76 - danceMix * 18}%)`);
+      sky.addColorStop(1, `hsl(${(discoPhase * 95 + 150) % 360} ${sat}% ${79 - danceMix * 27}%)`);
     } else {
       sky.addColorStop(0, "#95d7ff");
       sky.addColorStop(1, "#c6e7fb");
@@ -360,9 +363,10 @@ export class GameController {
     pyramid.closePath();
     const pyramidPaint = ctx.createLinearGradient(176, 84 + sceneOffsetY, 360, 246 + sceneOffsetY);
     if (danceActive) {
-      pyramidPaint.addColorStop(0, `hsla(${(discoPhase * 120 + 30) % 360} 95% 64% / 0.58)`);
-      pyramidPaint.addColorStop(0.5, `hsla(${(discoPhase * 120 + 150) % 360} 95% 58% / 0.5)`);
-      pyramidPaint.addColorStop(1, `hsla(${(discoPhase * 120 + 255) % 360} 95% 54% / 0.52)`);
+      const sat = 20 + danceMix * 75;
+      pyramidPaint.addColorStop(0, `hsla(${(discoPhase * 120 + 30) % 360} ${sat}% ${86 - danceMix * 22}% / 0.52)`);
+      pyramidPaint.addColorStop(0.5, `hsla(${(discoPhase * 120 + 150) % 360} ${sat}% ${76 - danceMix * 20}% / 0.48)`);
+      pyramidPaint.addColorStop(1, `hsla(${(discoPhase * 120 + 255) % 360} ${sat}% ${62 - danceMix * 10}% / 0.5)`);
     } else {
       pyramidPaint.addColorStop(0, "rgba(255, 223, 138, 0.5)");
       pyramidPaint.addColorStop(0.5, "rgba(220, 177, 95, 0.4)");
@@ -403,9 +407,10 @@ export class GameController {
     const grassTop = 250 + sceneOffsetY;
     const grassGradient = ctx.createLinearGradient(0, grassTop + 8, this.canvas.width, this.canvas.height);
     if (danceActive) {
-      grassGradient.addColorStop(0, `hsl(${(discoPhase * 110 + 340) % 360} 70% 35%)`);
-      grassGradient.addColorStop(0.52, `hsl(${(discoPhase * 110 + 90) % 360} 78% 43%)`);
-      grassGradient.addColorStop(1, `hsl(${(discoPhase * 110 + 200) % 360} 74% 40%)`);
+      const sat = 22 + danceMix * 56;
+      grassGradient.addColorStop(0, `hsl(${(discoPhase * 110 + 340) % 360} ${sat}% ${44 - danceMix * 9}%)`);
+      grassGradient.addColorStop(0.52, `hsl(${(discoPhase * 110 + 90) % 360} ${sat}% ${50 - danceMix * 7}%)`);
+      grassGradient.addColorStop(1, `hsl(${(discoPhase * 110 + 200) % 360} ${sat}% ${54 - danceMix * 14}%)`);
     } else {
       grassGradient.addColorStop(0, "#4d6f38");
       grassGradient.addColorStop(0.52, "#6f9051");
@@ -416,9 +421,9 @@ export class GameController {
 
     const grassPalette = danceActive
       ? [
-          `hsl(${(discoPhase * 130 + 20) % 360} 82% 32%)`,
-          `hsl(${(discoPhase * 130 + 160) % 360} 82% 42%)`,
-          `hsl(${(discoPhase * 130 + 280) % 360} 82% 52%)`,
+          `hsl(${(discoPhase * 130 + 20) % 360} ${20 + danceMix * 62}% ${41 - danceMix * 9}%)`,
+          `hsl(${(discoPhase * 130 + 160) % 360} ${24 + danceMix * 58}% ${49 - danceMix * 7}%)`,
+          `hsl(${(discoPhase * 130 + 280) % 360} ${28 + danceMix * 54}% ${58 - danceMix * 6}%)`,
         ]
       : ["#476833", "#628347", "#7ea65c"];
     for (let y = grassTop + 2; y < this.canvas.height; y += 14) {
@@ -757,11 +762,17 @@ export class GameController {
       }
     }
 
+    const dancing = this.effect?.type === "dance";
     ctx.strokeStyle = "#8f5a4b";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(-6, 10);
-    ctx.quadraticCurveTo(0, 13, 6, 10);
+    if (dancing) {
+      ctx.moveTo(-9, 8);
+      ctx.quadraticCurveTo(0, 17, 9, 8);
+    } else {
+      ctx.moveTo(-6, 10);
+      ctx.quadraticCurveTo(0, 13, 6, 10);
+    }
     ctx.stroke();
     ctx.globalAlpha = 1;
 
@@ -829,7 +840,7 @@ export class GameController {
     const scanning = this.doll.isScanning();
     const scanHeadRotation = this.vision.getDirection() - Math.PI / 2;
     const headRotation = dancing
-      ? Math.PI + Math.sin(now * 0.02) * 0.7
+      ? 0
       : this.doll.state === "turn"
         ? Math.PI - turnP * Math.PI
         : scanning
@@ -864,22 +875,27 @@ export class GameController {
 
   #getDanceFormation(now) {
     if (this.effect?.type !== "dance") return null;
-    const startedAt = this.effect.endsAt - (this.effect.durationMs ?? 60000);
-    const progress = Math.min(1, Math.max(0, (now - startedAt) / 2800));
+    const danceState = this.#getDanceState(now);
+    const progress = danceState.introProgress;
+    const returnProgress = danceState.returnProgress;
+    const swingScale = 1 - returnProgress;
     const centerX = this.canvas.width / 2;
     const centerY = this.canvas.height * 0.53;
     const ease = 1 - Math.pow(1 - progress, 3);
     const beat = now * 0.014;
-    const groupWaveX = Math.sin(beat * 0.9) * 24;
-    const groupWaveY = Math.cos(beat * 0.7) * 10;
+    const groupWaveX = Math.sin(beat * 0.9) * 24 * swingScale;
+    const groupWaveY = Math.cos(beat * 0.7) * 10 * swingScale;
+    const lerp = (from, to, alpha) => from + (to - from) * alpha;
 
     const dollStart = { x: this.canvas.width / 2, y: 264 };
+    const movedDollX = lerp(dollStart.x, centerX + groupWaveX, ease);
+    const movedDollY = lerp(dollStart.y, centerY - 34 + groupWaveY, ease);
     const doll = {
-      x: dollStart.x + (centerX + groupWaveX - dollStart.x) * ease,
-      y: dollStart.y + (centerY - 34 + groupWaveY - dollStart.y) * ease + Math.sin(beat * 2.6) * 14,
-      armSwing: Math.sin(beat * 2.4) * 1.35,
-      legSwing: Math.cos(beat * 2.1) * 1.1,
-      torsoLean: Math.sin(beat * 1.45) * 0.28,
+      x: lerp(movedDollX, dollStart.x, returnProgress),
+      y: lerp(movedDollY + Math.sin(beat * 2.6) * 14 * swingScale, dollStart.y, returnProgress),
+      armSwing: Math.sin(beat * 2.4) * 1.35 * swingScale,
+      legSwing: Math.cos(beat * 2.1) * 1.1 * swingScale,
+      torsoLean: Math.sin(beat * 1.45) * 0.28 * swingScale,
     };
 
     const guardsById = new Map();
@@ -890,15 +906,41 @@ export class GameController {
       const targetX = centerX + groupWaveX + Math.cos(angle) * radiusX;
       const targetY = centerY + groupWaveY + Math.sin(angle) * radiusY;
       const phase = beat + index * 1.2;
+      const movedX = lerp(guard.x, targetX, ease);
+      const movedY = lerp(guard.y, targetY, ease);
       guardsById.set(guard.id, {
-        x: guard.x + (targetX - guard.x) * ease + Math.sin(phase * 2.2) * 8,
-        y: guard.y + (targetY - guard.y) * ease + Math.cos(phase * 1.9) * 9,
-        torsoLean: Math.sin(phase * 1.5) * 0.34,
-        armSwing: Math.sin(phase * 2.8) * 1.25,
-        legSwing: Math.cos(phase * 2.4) * 1.1,
+        x: lerp(movedX + Math.sin(phase * 2.2) * 8 * swingScale, guard.x, returnProgress),
+        y: lerp(movedY + Math.cos(phase * 1.9) * 9 * swingScale, guard.y, returnProgress),
+        torsoLean: Math.sin(phase * 1.5) * 0.34 * swingScale,
+        armSwing: Math.sin(phase * 2.8) * 1.25 * swingScale,
+        legSwing: Math.cos(phase * 2.4) * 1.1 * swingScale,
       });
     }
     return { doll, guardsById };
+  }
+
+  #getDanceState(now) {
+    if (this.effect?.type !== "dance") {
+      return {
+        active: false,
+        introProgress: 0,
+        returnProgress: 0,
+        colorMix: 0,
+      };
+    }
+    const duration = this.effect.durationMs ?? 25000;
+    const startedAt = this.effect.endsAt - duration;
+    const elapsed = Math.max(0, now - startedAt);
+    const introProgress = Math.min(1, elapsed / 2800);
+    const returnWindowMs = 5000;
+    const returnProgress = Math.min(1, Math.max(0, (now - (this.effect.endsAt - returnWindowMs)) / returnWindowMs));
+    const colorMix = 1 - returnProgress;
+    return {
+      active: true,
+      introProgress,
+      returnProgress,
+      colorMix,
+    };
   }
 
   #drawPlayers(ctx, now) {
