@@ -12,6 +12,8 @@ const ui = {
   aliveCount: document.getElementById("alive-count"),
   rankingList: document.getElementById("ranking-list"),
   monthlyList: document.getElementById("monthly-ranking-list"),
+  levelLabel: document.getElementById("level-label"),
+  giftButtons: document.querySelectorAll(".gift-btn"),
   playBtn: document.getElementById("play-btn"),
   spawnBtn: document.getElementById("spawn-btn"),
   tapBtn: document.getElementById("tap-btn"),
