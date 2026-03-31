@@ -90,7 +90,7 @@ export class GameController {
       if (p) this.uiManager.announce(`🍩 +5 escudos para ${username} (${p.shields})`, "ok");
       return;
     }
-    if (normalized === "dance") this.#activateEffect("dance", 20000, username);
+    if (normalized === "dance") this.#activateEffect("dance", 60000, username);
     if (normalized === "freeze") this.#activateEffect("freeze", 10000, username);
     if (normalized === "pause") this.#activateEffect("pause", 20000, username);
     if (normalized === "mass") this.#massExplosion(username);
@@ -361,28 +361,29 @@ export class GameController {
     ctx.stroke(pyramid);
     ctx.restore();
 
+    const houseY = 188 + sceneOffsetY;
     ctx.fillStyle = "#f9f9f2";
-    ctx.fillRect(422, 154 + sceneOffsetY, 88, 68);
+    ctx.fillRect(422, houseY, 88, 68);
     ctx.fillStyle = "#b84a37";
     ctx.beginPath();
-    ctx.moveTo(412, 154 + sceneOffsetY);
-    ctx.lineTo(466, 126 + sceneOffsetY);
-    ctx.lineTo(520, 154 + sceneOffsetY);
+    ctx.moveTo(412, houseY);
+    ctx.lineTo(466, houseY - 28);
+    ctx.lineTo(520, houseY);
     ctx.closePath();
     ctx.fill();
 
     ctx.fillStyle = "#8f5e3e";
-    ctx.fillRect(455, 196 + sceneOffsetY, 18, 26);
+    ctx.fillRect(455, houseY + 42, 18, 26);
     ctx.fillStyle = "#d4ecff";
-    ctx.fillRect(483, 174 + sceneOffsetY, 16, 14);
+    ctx.fillRect(483, houseY + 20, 16, 14);
     ctx.strokeStyle = "#84644f";
     ctx.lineWidth = 2;
-    ctx.strokeRect(483, 174 + sceneOffsetY, 16, 14);
+    ctx.strokeRect(483, houseY + 20, 16, 14);
     ctx.beginPath();
-    ctx.moveTo(491, 174 + sceneOffsetY);
-    ctx.lineTo(491, 188 + sceneOffsetY);
-    ctx.moveTo(483, 181 + sceneOffsetY);
-    ctx.lineTo(499, 181 + sceneOffsetY);
+    ctx.moveTo(491, houseY + 20);
+    ctx.lineTo(491, houseY + 34);
+    ctx.moveTo(483, houseY + 27);
+    ctx.lineTo(499, houseY + 27);
     ctx.stroke();
 
     const grassTop = 250 + sceneOffsetY;
@@ -428,20 +429,32 @@ export class GameController {
   }
 
   #drawGuards(ctx, now) {
+    const dance = this.#getDanceFormation(now);
     for (const g of GUARDS) {
+      const guardDance = dance?.guardsById.get(g.id);
+      const gx = guardDance?.x ?? g.x;
+      const gy = guardDance?.y ?? g.y;
       const breath = Math.sin(now * 0.004 + g.x) * 1.7;
       const throwing = this.cookieStrike?.guardId === g.id && this.cookieStrike.state === "throw";
+      const torsoLean = guardDance?.torsoLean ?? 0;
+      const armSwing = guardDance?.armSwing ?? 0;
+      const legSwing = guardDance?.legSwing ?? 0;
       ctx.save();
-      ctx.translate(g.x, g.y + breath);
+      ctx.translate(gx, gy + breath);
+      ctx.rotate(torsoLean);
       ctx.fillStyle = "#cc2d44";
       ctx.fillRect(-11, -33, 22, 45);
       ctx.strokeStyle = "#1b1117";
       ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.moveTo(-11, -18);
-      ctx.lineTo(-22, throwing ? -50 : -8);
-      ctx.moveTo(11, -18);
-      ctx.lineTo(22, -8);
+      ctx.moveTo(-10, -18);
+      ctx.lineTo(-22 + armSwing * 8, throwing ? -50 : -8 + armSwing * 10);
+      ctx.moveTo(10, -18);
+      ctx.lineTo(22 - armSwing * 8, -8 - armSwing * 10);
+      ctx.moveTo(-6, 12);
+      ctx.lineTo(-8 + legSwing * 6, 32);
+      ctx.moveTo(6, 12);
+      ctx.lineTo(8 - legSwing * 6, 32);
       ctx.stroke();
       ctx.fillStyle = "#1a1518";
       ctx.fillRect(-10, -48, 20, 17);
@@ -610,11 +623,12 @@ export class GameController {
   }
 
   #drawDoll(ctx, now) {
-    const { x, y, bob, headRotation, frontVisible } = this.dollPose ?? this.#computeDollPose(now);
+    const { x, y, bob, headRotation, frontVisible, armSwing, legSwing, torsoLean } = this.dollPose ?? this.#computeDollPose(now);
     const backVisible = 1 - frontVisible;
 
     ctx.save();
     ctx.translate(x, y + bob);
+    ctx.rotate(torsoLean);
 
     ctx.fillStyle = "#f6d9ba";
     ctx.fillRect(-20, -46, 40, 20);
@@ -632,10 +646,26 @@ export class GameController {
     ctx.fillRect(-35, -27, 70, 18);
 
     ctx.fillStyle = "#f6d9ba";
-    ctx.fillRect(-58, -12, 13, 54);
-    ctx.fillRect(45, -12, 13, 54);
-    ctx.fillRect(-33, 84, 18, 70);
-    ctx.fillRect(15, 84, 18, 70);
+    ctx.save();
+    ctx.translate(-52, -12);
+    ctx.rotate(-0.22 + armSwing * 0.9);
+    ctx.fillRect(-6, 0, 13, 54);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(52, -12);
+    ctx.rotate(0.22 - armSwing * 0.9);
+    ctx.fillRect(-6, 0, 13, 54);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(-24, 84);
+    ctx.rotate(-0.08 + legSwing * 0.5);
+    ctx.fillRect(-9, 0, 18, 70);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(24, 84);
+    ctx.rotate(0.08 - legSwing * 0.5);
+    ctx.fillRect(-9, 0, 18, 70);
+    ctx.restore();
 
     ctx.save();
     ctx.translate(0, -62);
@@ -763,8 +793,9 @@ export class GameController {
   }
 
   #computeDollPose(now) {
-    const x = this.canvas.width / 2;
-    const y = 264;
+    const dance = this.#getDanceFormation(now);
+    const x = dance?.doll.x ?? this.canvas.width / 2;
+    const y = dance?.doll.y ?? 264;
     const dancing = this.effect?.type === "dance";
     const bob = dancing ? Math.sin(now * 0.018) * 8 : this.doll.state === "safe" ? Math.sin(now * 0.006) * 1.4 : 0;
     const turnP = this.doll.turnProgress(now);
@@ -795,10 +826,49 @@ export class GameController {
       bob,
       headRotation,
       frontVisible,
+      armSwing: dance?.doll.armSwing ?? (dancing ? Math.sin(now * 0.016) : 0),
+      legSwing: dance?.doll.legSwing ?? (dancing ? Math.sin(now * 0.013 + 1.2) : 0),
+      torsoLean: dance?.doll.torsoLean ?? (dancing ? Math.sin(now * 0.01) * 0.14 : 0),
       leftEye,
       rightEye,
       eyeCenter,
     };
+  }
+
+  #getDanceFormation(now) {
+    if (this.effect?.type !== "dance") return null;
+    const startedAt = this.effect.endsAt - 60000;
+    const progress = Math.min(1, Math.max(0, (now - startedAt) / 2800));
+    const centerX = this.canvas.width / 2;
+    const centerY = 404;
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const beat = now * 0.012;
+
+    const dollStart = { x: this.canvas.width / 2, y: 264 };
+    const doll = {
+      x: dollStart.x + (centerX - dollStart.x) * ease,
+      y: dollStart.y + (centerY - 62 - dollStart.y) * ease + Math.sin(beat * 1.8) * 8,
+      armSwing: Math.sin(beat * 1.8) * 0.95,
+      legSwing: Math.cos(beat * 1.6) * 0.75,
+      torsoLean: Math.sin(beat * 0.95) * 0.18,
+    };
+
+    const guardsById = new Map();
+    for (const [index, guard] of GUARDS.entries()) {
+      const angle = -Math.PI / 2 + index * (Math.PI / 3);
+      const radius = 96;
+      const targetX = centerX + Math.cos(angle) * radius;
+      const targetY = centerY + Math.sin(angle) * 58;
+      const phase = beat + index * 0.9;
+      guardsById.set(guard.id, {
+        x: guard.x + (targetX - guard.x) * ease + Math.sin(phase * 1.2) * 4,
+        y: guard.y + (targetY - guard.y) * ease + Math.cos(phase * 1.3) * 5,
+        torsoLean: Math.sin(phase) * 0.2,
+        armSwing: Math.sin(phase * 1.9),
+        legSwing: Math.cos(phase * 1.6),
+      });
+    }
+    return { doll, guardsById };
   }
 
   #drawPlayers(ctx, now) {
