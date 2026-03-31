@@ -313,7 +313,7 @@ export class GameController {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    this.#drawField(ctx);
+    this.#drawField(ctx, now);
     this.#drawCookieWarning(ctx, now);
     if (this.doll.isScanning()) this.#drawVisionCone(ctx, now);
     this.#drawGuards(ctx, now);
@@ -321,11 +321,19 @@ export class GameController {
     this.#drawPlayers(ctx, now);
   }
 
-  #drawField(ctx) {
+  #drawField(ctx, now) {
     const sceneOffsetY = -22;
+    const danceActive = this.effect?.type === "dance";
+    const discoPhase = now * 0.004;
     const sky = ctx.createLinearGradient(0, 0, 0, 310);
-    sky.addColorStop(0, "#95d7ff");
-    sky.addColorStop(1, "#c6e7fb");
+    if (danceActive) {
+      sky.addColorStop(0, `hsl(${(discoPhase * 95) % 360} 90% 62%)`);
+      sky.addColorStop(0.5, `hsl(${(discoPhase * 95 + 70) % 360} 88% 58%)`);
+      sky.addColorStop(1, `hsl(${(discoPhase * 95 + 150) % 360} 86% 52%)`);
+    } else {
+      sky.addColorStop(0, "#95d7ff");
+      sky.addColorStop(1, "#c6e7fb");
+    }
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.canvas.width, 320);
     ctx.fillStyle = "rgba(240, 247, 255, 0.9)";
@@ -351,9 +359,15 @@ export class GameController {
     pyramid.lineTo(364, 246 + sceneOffsetY);
     pyramid.closePath();
     const pyramidPaint = ctx.createLinearGradient(176, 84 + sceneOffsetY, 360, 246 + sceneOffsetY);
-    pyramidPaint.addColorStop(0, "rgba(255, 223, 138, 0.5)");
-    pyramidPaint.addColorStop(0.5, "rgba(220, 177, 95, 0.4)");
-    pyramidPaint.addColorStop(1, "rgba(160, 118, 64, 0.45)");
+    if (danceActive) {
+      pyramidPaint.addColorStop(0, `hsla(${(discoPhase * 120 + 30) % 360} 95% 64% / 0.58)`);
+      pyramidPaint.addColorStop(0.5, `hsla(${(discoPhase * 120 + 150) % 360} 95% 58% / 0.5)`);
+      pyramidPaint.addColorStop(1, `hsla(${(discoPhase * 120 + 255) % 360} 95% 54% / 0.52)`);
+    } else {
+      pyramidPaint.addColorStop(0, "rgba(255, 223, 138, 0.5)");
+      pyramidPaint.addColorStop(0.5, "rgba(220, 177, 95, 0.4)");
+      pyramidPaint.addColorStop(1, "rgba(160, 118, 64, 0.45)");
+    }
     ctx.fillStyle = pyramidPaint;
     ctx.fill(pyramid);
     ctx.strokeStyle = "rgba(133, 98, 56, 0.62)";
@@ -361,7 +375,7 @@ export class GameController {
     ctx.stroke(pyramid);
     ctx.restore();
 
-    const houseY = 188 + sceneOffsetY;
+    const houseY = 200 + sceneOffsetY;
     ctx.fillStyle = "#f9f9f2";
     ctx.fillRect(422, houseY, 88, 68);
     ctx.fillStyle = "#b84a37";
@@ -388,13 +402,25 @@ export class GameController {
 
     const grassTop = 250 + sceneOffsetY;
     const grassGradient = ctx.createLinearGradient(0, grassTop + 8, this.canvas.width, this.canvas.height);
-    grassGradient.addColorStop(0, "#4d6f38");
-    grassGradient.addColorStop(0.52, "#6f9051");
-    grassGradient.addColorStop(1, "#88ad64");
+    if (danceActive) {
+      grassGradient.addColorStop(0, `hsl(${(discoPhase * 110 + 340) % 360} 70% 35%)`);
+      grassGradient.addColorStop(0.52, `hsl(${(discoPhase * 110 + 90) % 360} 78% 43%)`);
+      grassGradient.addColorStop(1, `hsl(${(discoPhase * 110 + 200) % 360} 74% 40%)`);
+    } else {
+      grassGradient.addColorStop(0, "#4d6f38");
+      grassGradient.addColorStop(0.52, "#6f9051");
+      grassGradient.addColorStop(1, "#88ad64");
+    }
     ctx.fillStyle = grassGradient;
     ctx.fillRect(0, grassTop, this.canvas.width, this.canvas.height - grassTop);
 
-    const grassPalette = ["#476833", "#628347", "#7ea65c"];
+    const grassPalette = danceActive
+      ? [
+          `hsl(${(discoPhase * 130 + 20) % 360} 82% 32%)`,
+          `hsl(${(discoPhase * 130 + 160) % 360} 82% 42%)`,
+          `hsl(${(discoPhase * 130 + 280) % 360} 82% 52%)`,
+        ]
+      : ["#476833", "#628347", "#7ea65c"];
     for (let y = grassTop + 2; y < this.canvas.height; y += 14) {
       for (let x = 0; x < this.canvas.width; x += 12) {
         const n = Math.sin(x * 0.03 + y * 0.018) + Math.cos(y * 0.024 - x * 0.011);
@@ -592,6 +618,7 @@ export class GameController {
     this.effect = {
       type,
       actor,
+      durationMs,
       endsAt: performance.now() + durationMs,
     };
     if (type === "dance") {
@@ -837,35 +864,38 @@ export class GameController {
 
   #getDanceFormation(now) {
     if (this.effect?.type !== "dance") return null;
-    const startedAt = this.effect.endsAt - 60000;
+    const startedAt = this.effect.endsAt - (this.effect.durationMs ?? 60000);
     const progress = Math.min(1, Math.max(0, (now - startedAt) / 2800));
     const centerX = this.canvas.width / 2;
-    const centerY = 404;
+    const centerY = this.canvas.height * 0.53;
     const ease = 1 - Math.pow(1 - progress, 3);
-    const beat = now * 0.012;
+    const beat = now * 0.014;
+    const groupWaveX = Math.sin(beat * 0.9) * 24;
+    const groupWaveY = Math.cos(beat * 0.7) * 10;
 
     const dollStart = { x: this.canvas.width / 2, y: 264 };
     const doll = {
-      x: dollStart.x + (centerX - dollStart.x) * ease,
-      y: dollStart.y + (centerY - 62 - dollStart.y) * ease + Math.sin(beat * 1.8) * 8,
-      armSwing: Math.sin(beat * 1.8) * 0.95,
-      legSwing: Math.cos(beat * 1.6) * 0.75,
-      torsoLean: Math.sin(beat * 0.95) * 0.18,
+      x: dollStart.x + (centerX + groupWaveX - dollStart.x) * ease,
+      y: dollStart.y + (centerY - 34 + groupWaveY - dollStart.y) * ease + Math.sin(beat * 2.6) * 14,
+      armSwing: Math.sin(beat * 2.4) * 1.35,
+      legSwing: Math.cos(beat * 2.1) * 1.1,
+      torsoLean: Math.sin(beat * 1.45) * 0.28,
     };
 
     const guardsById = new Map();
     for (const [index, guard] of GUARDS.entries()) {
-      const angle = -Math.PI / 2 + index * (Math.PI / 3);
-      const radius = 96;
-      const targetX = centerX + Math.cos(angle) * radius;
-      const targetY = centerY + Math.sin(angle) * 58;
-      const phase = beat + index * 0.9;
+      const angle = -Math.PI / 2 + index * (Math.PI / 2);
+      const radiusX = 84;
+      const radiusY = 56;
+      const targetX = centerX + groupWaveX + Math.cos(angle) * radiusX;
+      const targetY = centerY + groupWaveY + Math.sin(angle) * radiusY;
+      const phase = beat + index * 1.2;
       guardsById.set(guard.id, {
-        x: guard.x + (targetX - guard.x) * ease + Math.sin(phase * 1.2) * 4,
-        y: guard.y + (targetY - guard.y) * ease + Math.cos(phase * 1.3) * 5,
-        torsoLean: Math.sin(phase) * 0.2,
-        armSwing: Math.sin(phase * 1.9),
-        legSwing: Math.cos(phase * 1.6),
+        x: guard.x + (targetX - guard.x) * ease + Math.sin(phase * 2.2) * 8,
+        y: guard.y + (targetY - guard.y) * ease + Math.cos(phase * 1.9) * 9,
+        torsoLean: Math.sin(phase * 1.5) * 0.34,
+        armSwing: Math.sin(phase * 2.8) * 1.25,
+        legSwing: Math.cos(phase * 2.4) * 1.1,
       });
     }
     return { doll, guardsById };
