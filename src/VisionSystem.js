@@ -122,8 +122,9 @@ function shortestAngle(a, b) {
 }
 
 function profileForLevel(level) {
-  const profiles = CONFIG.game.levelProfiles;
-  return profiles[Math.min(profiles.length - 1, Math.max(0, level - 1))];
+  const profiles = CONFIG.game.levelConfig;
+  const selected = profiles[Math.min(profiles.length - 1, Math.max(0, level - 1))];
+  return { turnMs: ((selected.turnMinSeconds + selected.turnMaxSeconds) / 2) * 1000 };
 }
 
 function randomInRange(min, max) {

@@ -27,6 +27,7 @@ export class PlayerManager {
       velocityY: 0,
       pendingImpulses: [],
       explosionParticles: [],
+      frozenUntil: 0,
     };
     this.players.set(id, player);
     return player;
@@ -82,9 +83,11 @@ export class PlayerManager {
     this.players.delete(id);
   }
 
-  update(now, { isDanger = false, freezeExcept = null } = {}) {
+  update(now, { isDanger = false, freezeExcept = null, forceFrozen = false } = {}) {
     for (const [id, p] of this.players.entries()) {
-      const frozen = freezeExcept && p.username !== freezeExcept;
+      const frozenByGift = freezeExcept && p.username !== freezeExcept;
+      const frozenByIce = forceFrozen && p.frozenUntil > now;
+      const frozen = frozenByGift || frozenByIce;
       if (p.bounce > 0) p.bounce = Math.max(0, p.bounce - 0.08);
       while (!frozen && p.pendingImpulses.length > 0 && p.pendingImpulses[0].dueAt <= now) {
         const impulse = p.pendingImpulses.shift();
@@ -154,6 +157,20 @@ export class PlayerManager {
     if (!p) return null;
     p.shields += amount;
     return p;
+  }
+
+  applyIceBreath(now, pushBackPercent) {
+    for (const p of this.getAlive()) {
+      if (p.shields > 0) {
+        p.shields -= 1;
+        continue;
+      }
+      p.frozenUntil = now + CONFIG.game.iceBreath.durationMs;
+      p.velocityY = 0;
+      p.pendingImpulses = [];
+      const totalTrack = CONFIG.game.startLineY - CONFIG.game.finishLineY;
+      p.y = Math.min(CONFIG.game.startLineY, p.y + totalTrack * pushBackPercent);
+    }
   }
 
   getAliveByUsername(username) {

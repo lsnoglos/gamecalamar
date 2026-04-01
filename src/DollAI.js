@@ -80,6 +80,13 @@ function randomInRange(min, max) {
 }
 
 function profileForLevel(level) {
-  const profiles = CONFIG.game.levelProfiles;
-  return profiles[Math.min(profiles.length - 1, Math.max(0, level - 1))];
+  const profiles = CONFIG.game.levelConfig;
+  const selected = profiles[Math.min(profiles.length - 1, Math.max(0, level - 1))];
+  return {
+    turnMs: randomInRange(selected.turnMinSeconds * 1000, selected.turnMaxSeconds * 1000),
+    safeMinMs: 2600,
+    safeMaxMs: 7600,
+    dangerMinMs: 900,
+    dangerMaxMs: 1700,
+  };
 }
