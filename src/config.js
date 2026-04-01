@@ -14,9 +14,9 @@ export const CONFIG = {
     levelConfig: LEVEL_CONFIG,
     preScanDelayMs: 1000,
     iceBreath: {
-      durationMs: 15000,
-      pushBackPercent: 0.15,
-      tickMs: 130,
+      durationMs: 3600,
+      pushBackPercent: 0.05,
+      tickMs: 900,
     },
     cone: {
       originY: 132,
