@@ -19,6 +19,8 @@ export class PlayerManager {
       shields: 0,
       lastMoveAt: 0,
       movedInDanger: false,
+      movedDuringFlash: false,
+      flashViolation: false,
       eliminatedAt: 0,
       rank: null,
       rankAnimStartAt: 0,
@@ -83,7 +85,7 @@ export class PlayerManager {
     this.players.delete(id);
   }
 
-  update(now, { isDanger = false, freezeExcept = null, forceFrozen = false } = {}) {
+  update(now, { isDanger = false, freezeExcept = null, forceFrozen = false, flashWindowActive = false } = {}) {
     for (const [id, p] of this.players.entries()) {
       const frozenByGift = freezeExcept && p.username !== freezeExcept;
       const frozenByIce = forceFrozen && p.frozenUntil > now;
@@ -95,6 +97,10 @@ export class PlayerManager {
         p.lastMoveAt = now;
         p.bounce = 1;
         if (impulse?.danger) p.movedInDanger = true;
+        if (flashWindowActive) {
+          p.movedDuringFlash = true;
+          p.flashViolation = true;
+        }
       }
 
       if (!frozen && p.velocityY > 0) {
@@ -106,6 +112,10 @@ export class PlayerManager {
         }
         if (isDanger && p.velocityY > 0.01) {
           p.movedInDanger = true;
+        }
+        if (flashWindowActive && p.velocityY > 0.01) {
+          p.movedDuringFlash = true;
+          p.flashViolation = true;
         }
         p.velocityY *= CONFIG.player.speedDamping;
         if (p.velocityY < 0.02) p.velocityY = 0;
@@ -142,6 +152,8 @@ export class PlayerManager {
       if (p.state === "alive") {
         p.y = randomInRange(CONFIG.player.spawnMinY, CONFIG.player.spawnMaxY);
         p.movedInDanger = false;
+        p.movedDuringFlash = false;
+        p.flashViolation = false;
         p.velocityY = 0;
         p.pendingImpulses = [];
       }
@@ -193,8 +205,16 @@ export class PlayerManager {
     return this.getAlive().filter((p) => p.movedInDanger);
   }
 
+  getFlashViolators() {
+    return this.getAlive().filter((p) => p.movedDuringFlash);
+  }
+
   clearDangerMovementFlags() {
-    for (const p of this.players.values()) p.movedInDanger = false;
+    for (const p of this.players.values()) {
+      p.movedInDanger = false;
+      p.movedDuringFlash = false;
+      p.flashViolation = false;
+    }
   }
 
   #lanePosition() {

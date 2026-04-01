@@ -47,6 +47,8 @@ export class GameController {
     this.clouds = this.#createClouds(9);
     this.remainingIceBreaths = this.#levelRule().iceBreathCount;
     this.activeIceBreath = null;
+    this.dangerGraceEndsAt = 0;
+    this.missileStrike = null;
 
     this.bridge = new EventBridge({
       onJoinCommand: (username) => this.spawnPlayer(username),
@@ -89,15 +91,10 @@ export class GameController {
       if (p) this.uiManager.announce(`🌹 +1 escudo para ${username} (${p.shields})`, "ok");
       return;
     }
-    if (normalized === "donut" || normalized === "dona") {
-      const p = this.players.addShieldByUsername(username, 5);
-      if (p) this.uiManager.announce(`🍩 +5 escudos para ${username} (${p.shields})`, "ok");
-      return;
-    }
-    if (normalized === "dance") this.#activateEffect("dance", 25000, username);
-    if (normalized === "freeze") this.#activateEffect("freeze", 10000, username);
-    if (normalized === "pause") this.#activateEffect("pause", 20000, username);
-    if (normalized === "mass") this.#massExplosion(username);
+    if (normalized === "corazon" || normalized === "heart") this.#activateEffect("freeze", 10000, username);
+    if (normalized === "sombrero" || normalized === "hat") this.#massExplosion(username);
+    if (normalized === "dona" || normalized === "donut") this.#activateMissileStrike(username);
+    if (normalized === "otros" || normalized === "others") this.#activateEffect("dance", 25000, username);
   }
 
   handleTap(username) {
@@ -152,6 +149,7 @@ export class GameController {
     const delta = now - this.lastFrameAt;
     this.lastFrameAt = now;
     const locked = this.effect && now < this.effect.endsAt;
+    const flashWindowActive = this.doll.state === "turn" && now <= this.dangerGraceEndsAt;
     if (locked) {
       this.roundStartAt += delta;
       this.doll.shiftTime(delta);
@@ -161,10 +159,12 @@ export class GameController {
       }
       this.uiManager.setContextMessage(`${this.#effectLabel()} ${Math.ceil((this.effect.endsAt - now) / 1000)}s`);
       if (this.effect.type === "iceBreath") this.#updateIceBreath(now);
+      if (this.effect.type === "missile") this.#updateMissileStrike(now);
     }
     if (this.effect && now >= this.effect.endsAt) {
       this.uiManager.announce("Efecto finalizado", "neutral");
       if (this.effect.type === "iceBreath") this.activeIceBreath = null;
+      if (this.effect.type === "missile") this.missileStrike = null;
       this.effect = null;
       this.sounds.stopDance();
     }
@@ -176,6 +176,7 @@ export class GameController {
       this.uiManager.triggerTurnFX();
       this.uiManager.announce("¡Se está volteando!", "danger");
       this.uiManager.setContextMessage("¡Se está volteando!");
+      this.dangerGraceEndsAt = now + 500;
     }
 
     if (stateEvent === "dangerHold") {
@@ -188,6 +189,7 @@ export class GameController {
       if (this.#shouldTriggerIceBreath()) {
         this.#startIceBreath(now);
       } else {
+        this.#eliminateFlashViolators(now);
         this.sounds.playScan();
         this.dangerSinceAt = now;
         this.aggressiveScan = false;
@@ -204,6 +206,7 @@ export class GameController {
       this.aggressiveScan = false;
       this.aggressiveProgress = 0;
       this.uiManager.setDangerMode(false);
+      this.dangerGraceEndsAt = 0;
     }
 
     if (this.doll.isScanning()) {
@@ -237,6 +240,7 @@ export class GameController {
       isDanger: this.doll.isDanger(),
       freezeExcept: this.effect?.type === "freeze" ? this.effect.actor : this.effect ? "__none__" : null,
       forceFrozen: this.effect?.type === "iceBreath",
+      flashWindowActive,
     });
     if (!locked) this.#updateCookieHazard(now);
     this.#checkGoal(now);
@@ -333,6 +337,7 @@ export class GameController {
     this.#drawGuards(ctx, now);
     this.#drawDoll(ctx, now);
     this.#drawPlayers(ctx, now);
+    this.#drawMissileSequence(ctx, now);
   }
 
   #drawField(ctx, now) {
@@ -476,10 +481,14 @@ export class GameController {
 
   #drawGuards(ctx, now) {
     const dance = this.#getDanceFormation(now);
+    const missilePhase = this.missileStrike?.phase;
+    const recoveryMove = missilePhase === "recovery" ? Math.min(1, (now - this.missileStrike.startedAt - 4000) / 2500) : 0;
     for (const g of GUARDS) {
       const guardDance = dance?.guardsById.get(g.id);
-      const gx = guardDance?.x ?? g.x;
-      const gy = guardDance?.y ?? g.y;
+      const targetX = this.canvas.width / 2 + (g.id - 2.5) * 26;
+      const targetY = 230 + (g.id % 2) * 12;
+      const gx = missilePhase === "recovery" ? g.x + (targetX - g.x) * recoveryMove : (guardDance?.x ?? g.x);
+      const gy = missilePhase === "recovery" ? g.y + (targetY - g.y) * recoveryMove : (guardDance?.y ?? g.y);
       const breath = Math.sin(now * 0.004 + g.x) * 1.7;
       const throwing = this.cookieStrike?.guardId === g.id && this.cookieStrike.state === "throw";
       const torsoLean = guardDance?.torsoLean ?? 0;
@@ -511,6 +520,10 @@ export class GameController {
       ctx.fillStyle = "#ffd166";
       ctx.font = "bold 10px sans-serif";
       ctx.fillText(`${g.id}`, 0, -18);
+      if (missilePhase === "recovery") {
+        ctx.fillStyle = "#f6d9ba";
+        ctx.fillRect(-5, -54, 10, 6);
+      }
       ctx.restore();
     }
   }
@@ -667,6 +680,7 @@ export class GameController {
     if (this.effect.type === "freeze") return "Tiempo detenido";
     if (this.effect.type === "pause") return "Pausa";
     if (this.effect.type === "iceBreath") return "Soplo de hielo";
+    if (this.effect.type === "missile") return "Misil";
     return "Efecto";
   }
 
@@ -683,27 +697,71 @@ export class GameController {
 
   #startIceBreath(now) {
     this.remainingIceBreaths -= 1;
-    this.players.applyIceBreath(now, CONFIG.game.iceBreath.pushBackPercent);
     this.effect = {
       type: "iceBreath",
       actor: "doll",
       durationMs: CONFIG.game.iceBreath.durationMs,
       endsAt: now + CONFIG.game.iceBreath.durationMs,
     };
-    this.activeIceBreath = { nextTickAt: now + CONFIG.game.iceBreath.tickMs };
+    this.activeIceBreath = { nextTickAt: now + CONFIG.game.iceBreath.tickMs, pulsesDone: 0 };
     this.uiManager.announce("❄️ Soplo de hielo: jugadores congelados", "danger");
   }
 
   #updateIceBreath(now) {
     if (!this.activeIceBreath || now < this.activeIceBreath.nextTickAt) return;
-    const push = CONFIG.game.iceBreath.pushBackPercent / 7;
+    if (this.activeIceBreath.pulsesDone >= 3) return;
+    const push = CONFIG.game.iceBreath.pushBackPercent;
     for (const p of this.players.getAlive()) {
-      if (p.frozenUntil <= now) continue;
+      if (p.shields > 0) {
+        p.shields -= 1;
+        continue;
+      }
+      p.frozenUntil = now + 900;
       const track = CONFIG.game.startLineY - CONFIG.game.finishLineY;
       p.y = Math.min(CONFIG.game.startLineY, p.y + track * push);
       this.uiManager.floatingText("🧊", p.x, p.y - 22, "danger");
     }
+    this.activeIceBreath.pulsesDone += 1;
     this.activeIceBreath.nextTickAt = now + CONFIG.game.iceBreath.tickMs;
+  }
+
+  #eliminateFlashViolators(now) {
+    for (const mover of this.players.getFlashViolators()) {
+      const eliminated = this.players.eliminatePlayer(mover.id, now);
+      if (eliminated?.blockedByShield) {
+        this.uiManager.announce(`🛡️ ${mover.username} resistió el escaneo`, "ok");
+      } else if (eliminated?.player) {
+        this.sounds.playElimination();
+        this.uiManager.announce(`${eliminated.player.username} eliminado por moverse en parpadeo`, "danger");
+      }
+    }
+  }
+
+  #activateMissileStrike(actor) {
+    const now = performance.now();
+    const launcher = this.players.getAliveByUsername(actor);
+    const launchFrom = launcher
+      ? { x: launcher.x, y: launcher.y - 22 }
+      : { x: this.canvas.width * 0.5, y: CONFIG.game.startLineY - 20 };
+    const target = { x: this.canvas.width / 2, y: 190 };
+    this.effect = {
+      type: "missile",
+      actor,
+      durationMs: 15000,
+      endsAt: now + 15000,
+    };
+    this.missileStrike = {
+      startedAt: now,
+      launchFrom,
+      target,
+    };
+    this.uiManager.announce(`🚀 ${actor} lanzó misil a la muñeca`, "danger");
+  }
+
+  #updateMissileStrike(now) {
+    if (!this.missileStrike || !this.effect) return;
+    const elapsed = now - this.missileStrike.startedAt;
+    this.missileStrike.phase = elapsed < 4000 ? "flight" : elapsed < 12000 ? "recovery" : "replace";
   }
 
   #createClouds(amount) {
@@ -737,6 +795,27 @@ export class GameController {
   }
 
   #drawDoll(ctx, now) {
+    if (this.missileStrike?.phase === "recovery") {
+      const t = (now - this.missileStrike.startedAt - 4000) / 8000;
+      const pieces = [
+        { x: 250, y: 214, r: 18 }, // cabeza
+        { x: 282, y: 260, r: 20 }, // tronco
+        { x: 230, y: 275, r: 10 }, // brazo
+        { x: 312, y: 272, r: 10 }, // brazo
+        { x: 258, y: 318, r: 11 }, // pierna
+        { x: 292, y: 320, r: 11 }, // pierna
+      ];
+      ctx.save();
+      for (const piece of pieces) {
+        const drift = Math.min(1, Math.max(0, t)) * 46;
+        ctx.fillStyle = "#f6d9ba";
+        ctx.beginPath();
+        ctx.arc(piece.x - drift, piece.y + drift * 0.35, piece.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
     const { x, y, bob, headRotation, frontVisible, armSwing, legSwing, torsoLean } = this.dollPose ?? this.#computeDollPose(now);
     const backVisible = 1 - frontVisible;
 
@@ -823,8 +902,8 @@ export class GameController {
     ctx.arc(0, 0, 24, 0, Math.PI * 2);
     ctx.fill();
 
-    const firingLaser = this.doll.isScanning() && frontVisible > 0.35;
     const iceBreathOn = this.effect?.type === "iceBreath" && frontVisible > 0.35;
+    const firingLaser = this.doll.isScanning() && !iceBreathOn && frontVisible > 0.35;
     ctx.fillStyle = firingLaser ? "#ffd1d1" : "#fff";
     ctx.beginPath();
     ctx.arc(-8, -2, 5.3, 0, Math.PI * 2);
@@ -846,7 +925,7 @@ export class GameController {
     }
     if (iceBreathOn) {
       const pulse = 0.7 + Math.sin(now * 0.04) * 0.2;
-      ctx.strokeStyle = `rgba(150,220,255,${0.45 + pulse * 0.35})`;
+      ctx.strokeStyle = `rgba(120,210,255,${0.45 + pulse * 0.35})`;
       ctx.lineWidth = 5;
       ctx.beginPath();
       ctx.moveTo(0, 10);
@@ -874,13 +953,14 @@ export class GameController {
 
   #drawVisionCone(ctx, now) {
     const cone = this.vision.getCone();
+    const iceMode = this.effect?.type === "iceBreath";
 
     ctx.fillStyle = "rgba(0,0,0,0.14)";
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     const glow = ctx.createRadialGradient(cone.origin.x, cone.origin.y, 36, cone.origin.x, cone.origin.y, cone.radius);
-    glow.addColorStop(0, this.aggressiveScan ? "rgba(255,50,50,0.5)" : "rgba(255,60,60,0.34)");
-    glow.addColorStop(1, "rgba(255,60,60,0.02)");
+    glow.addColorStop(0, iceMode ? "rgba(90,180,255,0.45)" : this.aggressiveScan ? "rgba(255,50,50,0.5)" : "rgba(255,60,60,0.34)");
+    glow.addColorStop(1, iceMode ? "rgba(90,180,255,0.04)" : "rgba(255,60,60,0.02)");
 
     ctx.beginPath();
     ctx.moveTo(cone.origin.x, cone.origin.y);
@@ -890,7 +970,7 @@ export class GameController {
     ctx.fillStyle = glow;
     ctx.fill();
 
-    ctx.strokeStyle = this.aggressiveScan ? "rgba(255,176,176,0.95)" : "rgba(255,128,128,0.8)";
+    ctx.strokeStyle = iceMode ? "rgba(170,225,255,0.95)" : this.aggressiveScan ? "rgba(255,176,176,0.95)" : "rgba(255,128,128,0.8)";
     ctx.lineWidth = this.aggressiveScan ? 3 : 2;
     ctx.stroke();
 
@@ -902,7 +982,7 @@ export class GameController {
     for (const eye of [this.dollPose.leftEye, this.dollPose.rightEye]) {
       const cx = eye.x + Math.cos(cone.direction) * centerLength;
       const cy = eye.y + Math.sin(cone.direction) * centerLength;
-      ctx.strokeStyle = `rgba(255,40,40,${0.65 + pulse * 0.25})`;
+      ctx.strokeStyle = iceMode ? `rgba(110,210,255,${0.6 + pulse * 0.24})` : `rgba(255,40,40,${0.65 + pulse * 0.25})`;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(eye.x, eye.y);
@@ -912,7 +992,7 @@ export class GameController {
       for (const edgeAngle of [cone.leftAngle, cone.rightAngle]) {
         const ex = eye.x + Math.cos(edgeAngle) * edgeLength;
         const ey = eye.y + Math.sin(edgeAngle) * edgeLength;
-        ctx.strokeStyle = `rgba(255,100,100,${0.25 + pulse * 0.2})`;
+        ctx.strokeStyle = iceMode ? `rgba(165,230,255,${0.3 + pulse * 0.2})` : `rgba(255,100,100,${0.25 + pulse * 0.2})`;
         ctx.lineWidth = 1.4;
         ctx.beginPath();
         ctx.moveTo(eye.x, eye.y);
@@ -1064,7 +1144,7 @@ export class GameController {
         }
       }
 
-      const suitColor = p.state === "eliminated" ? "#ff3b3b" : frozen ? CONFIG.player.iceTint : "#0e8f64";
+      const suitColor = p.state === "eliminated" ? "#ff3b3b" : p.flashViolation ? "#ff5f5f" : frozen ? CONFIG.player.iceTint : "#0e8f64";
       ctx.fillStyle = p.color;
       ctx.beginPath();
       ctx.arc(0, -15, 7, 0, Math.PI * 2);
@@ -1113,6 +1193,53 @@ export class GameController {
         ctx.font = "bold 12px sans-serif";
         ctx.fillText(`🧊 ${Math.ceil((p.frozenUntil - now) / 1000)}s`, p.x, p.y - 55);
       }
+    }
+  }
+
+  #drawMissileSequence(ctx, now) {
+    if (!this.missileStrike || this.effect?.type !== "missile") return;
+    const elapsed = now - this.missileStrike.startedAt;
+    const countdown = Math.max(0, Math.ceil((this.effect.endsAt - now) / 1000));
+
+    ctx.save();
+    ctx.fillStyle = "rgba(15,20,30,0.55)";
+    ctx.fillRect(170, 8, 200, 34);
+    ctx.fillStyle = "#ffecb3";
+    ctx.font = "bold 20px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`MISIL ${countdown}s`, this.canvas.width / 2, 31);
+    ctx.restore();
+
+    if (elapsed < 4000) {
+      const p = elapsed / 4000;
+      const x = this.missileStrike.launchFrom.x + (this.missileStrike.target.x - this.missileStrike.launchFrom.x) * p;
+      const y = this.missileStrike.launchFrom.y + (this.missileStrike.target.y - this.missileStrike.launchFrom.y) * p - Math.sin(p * Math.PI) * 60;
+      ctx.save();
+      ctx.strokeStyle = "rgba(190,190,190,0.6)";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(x - 35, y + 16);
+      ctx.lineTo(x, y + 3);
+      ctx.stroke();
+      ctx.fillStyle = "#d7d7d7";
+      ctx.fillRect(x - 12, y - 4, 24, 8);
+      ctx.fillStyle = "#ff7a3a";
+      ctx.beginPath();
+      ctx.moveTo(x + 12, y - 4);
+      ctx.lineTo(x + 22, y);
+      ctx.lineTo(x + 12, y + 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    } else {
+      const explosion = Math.min(1, (elapsed - 4000) / 900);
+      const radius = 24 + explosion * 48;
+      ctx.save();
+      ctx.fillStyle = `rgba(255,120,40,${0.65 - explosion * 0.45})`;
+      ctx.beginPath();
+      ctx.arc(this.canvas.width / 2, 192, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
   }
 }
