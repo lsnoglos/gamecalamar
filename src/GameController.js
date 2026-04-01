@@ -482,13 +482,38 @@ export class GameController {
   #drawGuards(ctx, now) {
     const dance = this.#getDanceFormation(now);
     const missilePhase = this.missileStrike?.phase;
-    const recoveryMove = missilePhase === "recovery" ? Math.min(1, (now - this.missileStrike.startedAt - 4000) / 2500) : 0;
+    const elapsedMissile = this.missileStrike ? now - this.missileStrike.startedAt : 0;
     for (const g of GUARDS) {
       const guardDance = dance?.guardsById.get(g.id);
-      const targetX = this.canvas.width / 2 + (g.id - 2.5) * 26;
-      const targetY = 230 + (g.id % 2) * 12;
-      const gx = missilePhase === "recovery" ? g.x + (targetX - g.x) * recoveryMove : (guardDance?.x ?? g.x);
-      const gy = missilePhase === "recovery" ? g.y + (targetY - g.y) * recoveryMove : (guardDance?.y ?? g.y);
+      let gx = guardDance?.x ?? g.x;
+      let gy = guardDance?.y ?? g.y;
+      const cleanupP = Math.min(1, Math.max(0, (elapsedMissile - 4000) / 6000));
+      const replaceP = Math.min(1, Math.max(0, (elapsedMissile - 10000) / 5000));
+      const blastP = Math.min(1, cleanupP / 0.36);
+      const carryP = Math.min(1, Math.max(0, (cleanupP - 0.36) / 0.64));
+
+      if (missilePhase === "recovery") {
+        const laneY = 78 + (g.id - 1) * 24;
+        const partIndex = (g.id - 1) % this.missileStrike.parts.length;
+        const part = this.missileStrike.parts[partIndex];
+        const spreadAngle = -Math.PI * 0.95 + partIndex * 0.62;
+        const spreadDist = 30 + partIndex * 8;
+        const partX = part.x + Math.cos(spreadAngle) * spreadDist * blastP;
+        const partY = part.y + Math.sin(spreadAngle) * (spreadDist * 0.65) * blastP + blastP * 22;
+        const collectX = partX + (this.canvas.width + 80 - partX) * carryP;
+        const collectY = partY + (laneY - partY) * carryP;
+        gx = g.x + (collectX - g.x) * cleanupP;
+        gy = g.y + (collectY - g.y) * cleanupP;
+      }
+
+      if (missilePhase === "replace") {
+        const startX = this.canvas.width + 80 + (g.id - 1) * 18;
+        const startY = 70 + (g.id - 1) * 20;
+        const targetX = this.canvas.width / 2 + (g.id - 2.5) * 34;
+        const targetY = 234 + (g.id % 2) * 12;
+        gx = startX + (targetX - startX) * replaceP;
+        gy = startY + (targetY - startY) * replaceP;
+      }
       const breath = Math.sin(now * 0.004 + g.x) * 1.7;
       const throwing = this.cookieStrike?.guardId === g.id && this.cookieStrike.state === "throw";
       const torsoLean = guardDance?.torsoLean ?? 0;
@@ -520,7 +545,7 @@ export class GameController {
       ctx.fillStyle = "#ffd166";
       ctx.font = "bold 10px sans-serif";
       ctx.fillText(`${g.id}`, 0, -18);
-      if (missilePhase === "recovery") {
+      if (missilePhase === "recovery" || missilePhase === "replace") {
         ctx.fillStyle = "#f6d9ba";
         ctx.fillRect(-5, -54, 10, 6);
       }
@@ -754,6 +779,8 @@ export class GameController {
       startedAt: now,
       launchFrom,
       target,
+      phase: "flight",
+      parts: this.#createDollParts(target),
     };
     this.uiManager.announce(`🚀 ${actor} lanzó misil a la muñeca`, "danger");
   }
@@ -761,16 +788,16 @@ export class GameController {
   #updateMissileStrike(now) {
     if (!this.missileStrike || !this.effect) return;
     const elapsed = now - this.missileStrike.startedAt;
-    this.missileStrike.phase = elapsed < 4000 ? "flight" : elapsed < 12000 ? "recovery" : "replace";
+    this.missileStrike.phase = elapsed < 4000 ? "flight" : elapsed < 10000 ? "recovery" : "replace";
   }
 
   #createClouds(amount) {
     return Array.from({ length: amount }, () => ({
       x: this.#randomBetween(0, this.canvas.width),
-      y: this.#randomBetween(24, 190),
-      width: this.#randomBetween(58, 116),
-      speed: this.#randomBetween(0.07, 0.24),
-      alpha: this.#randomBetween(0.25, 0.6),
+      y: this.#randomBetween(18, 210),
+      width: this.#randomBetween(74, 148),
+      speed: this.#randomBetween(0.22, 0.52),
+      alpha: this.#randomBetween(0.34, 0.78),
     }));
   }
 
@@ -779,9 +806,9 @@ export class GameController {
       cloud.x -= cloud.speed;
       if (cloud.x < -cloud.width - 40) {
         cloud.x = this.canvas.width + this.#randomBetween(20, 120);
-        cloud.y = this.#randomBetween(26, 196);
+        cloud.y = this.#randomBetween(22, 210);
       }
-      const wobble = Math.sin((now + cloud.x * 8) * 0.0012) * 3;
+      const wobble = Math.sin((now + cloud.x * 8) * 0.0018) * 4;
       ctx.save();
       ctx.globalAlpha = cloud.alpha;
       ctx.fillStyle = "#ffffff";
@@ -796,24 +823,11 @@ export class GameController {
 
   #drawDoll(ctx, now) {
     if (this.missileStrike?.phase === "recovery") {
-      const t = (now - this.missileStrike.startedAt - 4000) / 8000;
-      const pieces = [
-        { x: 250, y: 214, r: 18 }, // cabeza
-        { x: 282, y: 260, r: 20 }, // tronco
-        { x: 230, y: 275, r: 10 }, // brazo
-        { x: 312, y: 272, r: 10 }, // brazo
-        { x: 258, y: 318, r: 11 }, // pierna
-        { x: 292, y: 320, r: 11 }, // pierna
-      ];
-      ctx.save();
-      for (const piece of pieces) {
-        const drift = Math.min(1, Math.max(0, t)) * 46;
-        ctx.fillStyle = "#f6d9ba";
-        ctx.beginPath();
-        ctx.arc(piece.x - drift, piece.y + drift * 0.35, piece.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
+      this.#drawMissileDollParts(ctx, now);
+      return;
+    }
+    if (this.missileStrike?.phase === "replace") {
+      this.#drawReplacementDoll(ctx, now);
       return;
     }
     const { x, y, bob, headRotation, frontVisible, armSwing, legSwing, torsoLean } = this.dollPose ?? this.#computeDollPose(now);
@@ -1241,5 +1255,94 @@ export class GameController {
       ctx.fill();
       ctx.restore();
     }
+  }
+
+  #createDollParts(target) {
+    return [
+      { type: "head", x: target.x, y: target.y - 56, rx: 18, ry: 18 },
+      { type: "torso", x: target.x, y: target.y - 6, rx: 24, ry: 36 },
+      { type: "armL", x: target.x - 42, y: target.y - 10, rx: 10, ry: 28 },
+      { type: "armR", x: target.x + 42, y: target.y - 10, rx: 10, ry: 28 },
+      { type: "legL", x: target.x - 16, y: target.y + 56, rx: 11, ry: 32 },
+      { type: "legR", x: target.x + 16, y: target.y + 56, rx: 11, ry: 32 },
+    ];
+  }
+
+  #drawMissileDollParts(ctx, now) {
+    const elapsed = now - this.missileStrike.startedAt;
+    const cleanupP = Math.min(1, Math.max(0, (elapsed - 4000) / 6000));
+    const blastP = Math.min(1, cleanupP / 0.36);
+    const carryP = Math.min(1, Math.max(0, (cleanupP - 0.36) / 0.64));
+    const offscreenX = this.canvas.width + 80;
+    const skin = "#f6d9ba";
+
+    ctx.save();
+    for (const [index, part] of this.missileStrike.parts.entries()) {
+      const spreadAngle = -Math.PI * 0.95 + index * 0.62;
+      const spreadDist = 30 + index * 8;
+      const explodedX = part.x + Math.cos(spreadAngle) * spreadDist * blastP;
+      const explodedY = part.y + Math.sin(spreadAngle) * (spreadDist * 0.65) * blastP + blastP * 22;
+      const targetY = 78 + index * 18;
+      const x = explodedX + (offscreenX - explodedX) * carryP;
+      const y = explodedY + (targetY - explodedY) * carryP;
+      const spin = blastP * 0.5 + carryP * 0.2;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate((index - 2.5) * spin);
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, part.rx, part.ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (part.type === "torso") {
+        ctx.fillStyle = "#f29339";
+        ctx.fillRect(-part.rx + 4, -8, (part.rx - 4) * 2, 18);
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  #drawReplacementDoll(ctx, now) {
+    const elapsed = now - this.missileStrike.startedAt;
+    const p = Math.min(1, Math.max(0, (elapsed - 10000) / 5000));
+    const placeP = Math.min(1, p / 0.75);
+    const startX = this.canvas.width + 80;
+    const x = startX + (this.canvas.width / 2 - startX) * placeP;
+    const y = 236 + (264 - 236) * placeP;
+    const settle = Math.max(0, (p - 0.75) / 0.25);
+    const bounce = Math.sin(settle * Math.PI) * 5 * (1 - settle);
+
+    ctx.save();
+    ctx.translate(x, y + bounce);
+    this.#paintDollSilhouette(ctx);
+    ctx.restore();
+  }
+
+  #paintDollSilhouette(ctx) {
+    ctx.fillStyle = "#f6d9ba";
+    ctx.fillRect(-20, -46, 40, 20);
+    ctx.fillStyle = "#f29339";
+    ctx.beginPath();
+    ctx.moveTo(-44, -26);
+    ctx.lineTo(44, -26);
+    ctx.lineTo(62, 84);
+    ctx.lineTo(-62, 84);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#f2cc41";
+    ctx.fillRect(-35, -27, 70, 18);
+    ctx.fillStyle = "#f6d9ba";
+    ctx.fillRect(-58, -10, 13, 54);
+    ctx.fillRect(45, -10, 13, 54);
+    ctx.fillRect(-29, 84, 18, 70);
+    ctx.fillRect(11, 84, 18, 70);
+    ctx.fillStyle = "#2d1f1a";
+    ctx.beginPath();
+    ctx.arc(0, -62, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#f6d9ba";
+    ctx.beginPath();
+    ctx.arc(0, -62, 24, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
