@@ -6,7 +6,7 @@ export const CONFIG = {
     height: 960,
   },
   game: {
-    roundSeconds: 180,
+    roundSeconds: 120,
     maxWinners: 10,
     startLineY: 914,
     finishLineY: 332,
