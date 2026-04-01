@@ -350,9 +350,38 @@ button {
   .scene-layout {
     grid-template-columns: minmax(122px, 148px) minmax(0, 1fr);
   }
-  .hud-ranking ol {
+  .hud-ranking {
+    padding: 8px 9px;
+  }
+  .hud-ranking h2 {
+    font-size: 18px;
+  }
+  .ranking-section h3 {
+    margin: 6px 0 3px;
     font-size: 13px;
-    line-height: 1.4;
+  }
+  .hud-ranking ol {
+    margin-top: 2px;
+    padding-left: 19px;
+    font-size: 12px;
+    line-height: 1.28;
+  }
+  .ranking-section.monthly {
+    margin-top: 6px;
+    padding-top: 3px;
+  }
+  .ranking-message {
+    margin-top: 7px;
+    font-size: 14px;
+    padding: 6px 5px;
+  }
+  .join-tip {
+    margin-top: 5px;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+  .join-tip-callout {
+    padding: 2px 4px;
   }
   .gift-btn {
     flex-basis: calc((100% - 10px) / 3);
