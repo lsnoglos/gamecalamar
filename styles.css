@@ -251,19 +251,19 @@ body {
 }
 
 .gift-btn {
-  font-size: 11px;
-  padding: 7px 5px;
+  font-size: 10px;
+  padding: 4px 4px;
   background: linear-gradient(180deg, #1f4560, #143245);
   border: 1px solid #6e9fbd;
   border-radius: 8px;
   color: #eef8ff;
-  line-height: 1.15;
-  min-height: 54px;
+  line-height: 1.08;
+  min-height: 38px;
 }
 .gift-btn small {
   display: block;
-  font-size: 9px;
-  margin-top: 2px;
+  font-size: 8px;
+  margin-top: 1px;
   opacity: 0.9;
 }
 
