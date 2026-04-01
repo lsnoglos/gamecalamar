@@ -44,6 +44,9 @@ export class GameController {
     this.nextCookieAttackAt = Infinity;
     this.effect = null;
     this.lastFrameAt = performance.now();
+    this.clouds = this.#createClouds(9);
+    this.remainingIceBreaths = this.#levelRule().iceBreathCount;
+    this.activeIceBreath = null;
 
     this.bridge = new EventBridge({
       onJoinCommand: (username) => this.spawnPlayer(username),
@@ -61,6 +64,7 @@ export class GameController {
     this.doll.start(now, this.level);
     this.vision.setLevel(this.level);
     this.nextCookieAttackAt = now + this.#cookieAttackIntervalMs();
+    this.remainingIceBreaths = this.#levelRule().iceBreathCount;
     this.sounds.playIdle();
     requestAnimationFrame((t) => this.#loop(t));
   }
@@ -103,6 +107,7 @@ export class GameController {
 
     if (username) {
       if (this.effect?.type === "freeze" && this.effect.actor !== username) return;
+      if (this.effect?.type === "iceBreath") return;
       if (this.effect?.type === "pause" || this.effect?.type === "dance") return;
       const candidate = this.players.getAll().find((p) => p.username === username);
       if (candidate && this.players.applyTap(candidate.id, now, isDanger)) {
@@ -112,7 +117,7 @@ export class GameController {
       return;
     }
 
-    if ((this.effect?.type === "pause") || (this.effect?.type === "dance") || (this.effect?.type === "freeze")) return;
+    if ((this.effect?.type === "pause") || (this.effect?.type === "dance") || (this.effect?.type === "freeze") || (this.effect?.type === "iceBreath")) return;
     if (this.players.applyGlobalTap(now, isDanger)) {
       this.sounds.playStep();
       if (isDanger) {
@@ -155,9 +160,11 @@ export class GameController {
         if (this.cookieStrike.impactAt) this.cookieStrike.impactAt += delta;
       }
       this.uiManager.setContextMessage(`${this.#effectLabel()} ${Math.ceil((this.effect.endsAt - now) / 1000)}s`);
+      if (this.effect.type === "iceBreath") this.#updateIceBreath(now);
     }
     if (this.effect && now >= this.effect.endsAt) {
       this.uiManager.announce("Efecto finalizado", "neutral");
+      if (this.effect.type === "iceBreath") this.activeIceBreath = null;
       this.effect = null;
       this.sounds.stopDance();
     }
@@ -178,12 +185,16 @@ export class GameController {
     }
 
     if (stateEvent === "danger") {
-      this.sounds.playScan();
-      this.dangerSinceAt = now;
-      this.aggressiveScan = false;
-      this.aggressiveProgress = 0;
-      this.uiManager.setContextMessage("¡No te muevas!");
-      this.uiManager.announce("La muñeca te está viendo 👁️", "danger");
+      if (this.#shouldTriggerIceBreath()) {
+        this.#startIceBreath(now);
+      } else {
+        this.sounds.playScan();
+        this.dangerSinceAt = now;
+        this.aggressiveScan = false;
+        this.aggressiveProgress = 0;
+        this.uiManager.setContextMessage("¡No te muevas!");
+        this.uiManager.announce("La muñeca te está viendo 👁️", "danger");
+      }
     }
 
     if (stateEvent === "safe") {
@@ -225,6 +236,7 @@ export class GameController {
     this.players.update(now, {
       isDanger: this.doll.isDanger(),
       freezeExcept: this.effect?.type === "freeze" ? this.effect.actor : this.effect ? "__none__" : null,
+      forceFrozen: this.effect?.type === "iceBreath",
     });
     if (!locked) this.#updateCookieHazard(now);
     this.#checkGoal(now);
@@ -294,6 +306,8 @@ export class GameController {
     this.doll.start(now, this.level);
     this.vision.setLevel(this.level);
     this.nextCookieAttackAt = now + this.#cookieAttackIntervalMs();
+    this.remainingIceBreaths = this.#levelRule().iceBreathCount;
+    this.activeIceBreath = null;
     this.cookieStrike = null;
   }
 
@@ -339,6 +353,7 @@ export class GameController {
     }
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.canvas.width, 320);
+    this.#drawClouds(ctx, now);
     ctx.fillStyle = "rgba(240, 247, 255, 0.9)";
     ctx.font = "900 56px 'Segoe UI', sans-serif";
     ctx.textAlign = "center";
@@ -610,9 +625,9 @@ export class GameController {
   }
 
   #cookieAttackIntervalMs() {
-    const perLevelSeconds = [48, 44, 40, 36, 33, 30, 28, 25, 22, 20];
-    const index = Math.min(10, Math.max(1, this.level)) - 1;
-    return perLevelSeconds[index] * 1000;
+    const seconds = this.#levelRule().cookieEverySeconds;
+    if (!seconds) return Infinity;
+    return seconds * 1000;
   }
 
   #randomBetween(min, max) {
@@ -651,7 +666,74 @@ export class GameController {
     if (this.effect.type === "dance") return "Baile";
     if (this.effect.type === "freeze") return "Tiempo detenido";
     if (this.effect.type === "pause") return "Pausa";
+    if (this.effect.type === "iceBreath") return "Soplo de hielo";
     return "Efecto";
+  }
+
+  #levelRule() {
+    const configs = CONFIG.game.levelConfig;
+    const idx = Math.min(configs.length, Math.max(1, this.level)) - 1;
+    return configs[idx];
+  }
+
+  #shouldTriggerIceBreath() {
+    if (this.remainingIceBreaths <= 0) return false;
+    return Math.random() < 0.45;
+  }
+
+  #startIceBreath(now) {
+    this.remainingIceBreaths -= 1;
+    this.players.applyIceBreath(now, CONFIG.game.iceBreath.pushBackPercent);
+    this.effect = {
+      type: "iceBreath",
+      actor: "doll",
+      durationMs: CONFIG.game.iceBreath.durationMs,
+      endsAt: now + CONFIG.game.iceBreath.durationMs,
+    };
+    this.activeIceBreath = { nextTickAt: now + CONFIG.game.iceBreath.tickMs };
+    this.uiManager.announce("❄️ Soplo de hielo: jugadores congelados", "danger");
+  }
+
+  #updateIceBreath(now) {
+    if (!this.activeIceBreath || now < this.activeIceBreath.nextTickAt) return;
+    const push = CONFIG.game.iceBreath.pushBackPercent / 7;
+    for (const p of this.players.getAlive()) {
+      if (p.frozenUntil <= now) continue;
+      const track = CONFIG.game.startLineY - CONFIG.game.finishLineY;
+      p.y = Math.min(CONFIG.game.startLineY, p.y + track * push);
+      this.uiManager.floatingText("🧊", p.x, p.y - 22, "danger");
+    }
+    this.activeIceBreath.nextTickAt = now + CONFIG.game.iceBreath.tickMs;
+  }
+
+  #createClouds(amount) {
+    return Array.from({ length: amount }, () => ({
+      x: this.#randomBetween(0, this.canvas.width),
+      y: this.#randomBetween(24, 190),
+      width: this.#randomBetween(58, 116),
+      speed: this.#randomBetween(0.07, 0.24),
+      alpha: this.#randomBetween(0.25, 0.6),
+    }));
+  }
+
+  #drawClouds(ctx, now) {
+    for (const cloud of this.clouds) {
+      cloud.x -= cloud.speed;
+      if (cloud.x < -cloud.width - 40) {
+        cloud.x = this.canvas.width + this.#randomBetween(20, 120);
+        cloud.y = this.#randomBetween(26, 196);
+      }
+      const wobble = Math.sin((now + cloud.x * 8) * 0.0012) * 3;
+      ctx.save();
+      ctx.globalAlpha = cloud.alpha;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.ellipse(cloud.x, cloud.y + wobble, cloud.width * 0.26, cloud.width * 0.18, 0, 0, Math.PI * 2);
+      ctx.ellipse(cloud.x + cloud.width * 0.18, cloud.y - 6 + wobble, cloud.width * 0.22, cloud.width * 0.16, 0, 0, Math.PI * 2);
+      ctx.ellipse(cloud.x - cloud.width * 0.2, cloud.y - 5 + wobble, cloud.width * 0.2, cloud.width * 0.15, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   #drawDoll(ctx, now) {
@@ -742,12 +824,13 @@ export class GameController {
     ctx.fill();
 
     const firingLaser = this.doll.isScanning() && frontVisible > 0.35;
+    const iceBreathOn = this.effect?.type === "iceBreath" && frontVisible > 0.35;
     ctx.fillStyle = firingLaser ? "#ffd1d1" : "#fff";
     ctx.beginPath();
     ctx.arc(-8, -2, 5.3, 0, Math.PI * 2);
     ctx.arc(8, -2, 5.3, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = firingLaser ? "#8b0000" : "#111";
+    ctx.fillStyle = firingLaser ? "#8b0000" : iceBreathOn ? "#1e90ff" : "#111";
     ctx.beginPath();
     ctx.arc(-8, -2, 2.7, 0, Math.PI * 2);
     ctx.arc(8, -2, 2.7, 0, Math.PI * 2);
@@ -760,6 +843,15 @@ export class GameController {
         ctx.arc(eyeX, -2, 3.6 + pulse * 1.4, 0, Math.PI * 2);
         ctx.fill();
       }
+    }
+    if (iceBreathOn) {
+      const pulse = 0.7 + Math.sin(now * 0.04) * 0.2;
+      ctx.strokeStyle = `rgba(150,220,255,${0.45 + pulse * 0.35})`;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(0, 10);
+      ctx.quadraticCurveTo(0, 22, 0, 42);
+      ctx.stroke();
     }
 
     const dancing = this.effect?.type === "dance";
@@ -947,6 +1039,7 @@ export class GameController {
     for (const p of this.players.getAll()) {
       const walkBounce = p.bounce > 0 ? Math.sin(now * 0.03) * 4 * p.bounce : 0;
       const highlighted = this.doll.isScanning() && this.vision.isPointInside({ x: p.x, y: p.y }) && p.state === "alive";
+      const frozen = p.frozenUntil > now;
 
       ctx.save();
       ctx.translate(p.x, p.y + walkBounce);
@@ -971,7 +1064,7 @@ export class GameController {
         }
       }
 
-      const suitColor = p.state === "eliminated" ? "#ff3b3b" : "#0e8f64";
+      const suitColor = p.state === "eliminated" ? "#ff3b3b" : frozen ? CONFIG.player.iceTint : "#0e8f64";
       ctx.fillStyle = p.color;
       ctx.beginPath();
       ctx.arc(0, -15, 7, 0, Math.PI * 2);
@@ -1014,6 +1107,11 @@ export class GameController {
         ctx.fillStyle = "#9cecff";
         ctx.font = "bold 13px sans-serif";
         ctx.fillText(`🛡️${p.shields}`, p.x, p.y - 42);
+      }
+      if (frozen && p.state === "alive") {
+        ctx.fillStyle = "#bdefff";
+        ctx.font = "bold 12px sans-serif";
+        ctx.fillText(`🧊 ${Math.ceil((p.frozenUntil - now) / 1000)}s`, p.x, p.y - 55);
       }
     }
   }

@@ -1,3 +1,5 @@
+import { LEVEL_CONFIG } from "./levelConfig.js";
+
 export const CONFIG = {
   canvas: {
     width: 540,
@@ -9,79 +11,13 @@ export const CONFIG = {
     startLineY: 914,
     finishLineY: 332,
     finishWindow: 3,
-    levelProfiles: [
-      {
-        turnMs: 320,
-        safeMinMs: 4000,
-        safeMaxMs: 13000,
-        dangerMinMs: 1000,
-        dangerMaxMs: 1800,
-      },
-      {
-        turnMs: 300,
-        safeMinMs: 4000,
-        safeMaxMs: 11000,
-        dangerMinMs: 1000,
-        dangerMaxMs: 1700,
-      },
-      {
-        turnMs: 290,
-        safeMinMs: 3000,
-        safeMaxMs: 10000,
-        dangerMinMs: 900,
-        dangerMaxMs: 1600,
-      },
-      {
-        turnMs: 280,
-        safeMinMs: 3000,
-        safeMaxMs: 9000,
-        dangerMinMs: 900,
-        dangerMaxMs: 1500,
-      },
-      {
-        turnMs: 270,
-        safeMinMs: 3000,
-        safeMaxMs: 8000,
-        dangerMinMs: 800,
-        dangerMaxMs: 1400,
-      },
-      {
-        turnMs: 260,
-        safeMinMs: 3000,
-        safeMaxMs: 7000,
-        dangerMinMs: 800,
-        dangerMaxMs: 1300,
-      },
-      {
-        turnMs: 250,
-        safeMinMs: 2000,
-        safeMaxMs: 6000,
-        dangerMinMs: 700,
-        dangerMaxMs: 1200,
-      },
-      {
-        turnMs: 240,
-        safeMinMs: 2000,
-        safeMaxMs: 5000,
-        dangerMinMs: 700,
-        dangerMaxMs: 1100,
-      },
-      {
-        turnMs: 230,
-        safeMinMs: 2000,
-        safeMaxMs: 4000,
-        dangerMinMs: 600,
-        dangerMaxMs: 1000,
-      },
-      {
-        turnMs: 220,
-        safeMinMs: 1000,
-        safeMaxMs: 3000,
-        dangerMinMs: 600,
-        dangerMaxMs: 900,
-      },
-    ],
+    levelConfig: LEVEL_CONFIG,
     preScanDelayMs: 1000,
+    iceBreath: {
+      durationMs: 15000,
+      pushBackPercent: 0.15,
+      tickMs: 130,
+    },
     cone: {
       originY: 132,
       radius: 980,
@@ -108,6 +44,7 @@ export const CONFIG = {
     lanePadding: 34,
     eliminationFadeMs: 400,
     rankTravelMs: 550,
+    iceTint: "#8ddfff",
   },
   ui: {
     messageRotateMs: 2500,
