@@ -59,6 +59,12 @@ export class PlayerManager {
     return moved;
   }
 
+  applyTapByUsername(username, now, isDanger) {
+    const p = this.getAliveByUsername(username);
+    if (!p) return false;
+    return this.applyTap(p.id, now, isDanger);
+  }
+
   eliminatePlayer(id, now, { bypassShield = false } = {}) {
     const p = this.players.get(id);
     if (!p || p.state !== "alive") return null;
@@ -86,9 +92,10 @@ export class PlayerManager {
     this.players.delete(id);
   }
 
-  update(now, { isDanger = false, freezeExceptId = null, forceFrozen = false, flashWindowActive = false } = {}) {
+  update(now, { isDanger = false, freezeExceptId = null, freezeExceptIds = [], forceFrozen = false, flashWindowActive = false } = {}) {
+    const allowedFreezeIds = new Set([freezeExceptId, ...freezeExceptIds].filter(Boolean));
     for (const [id, p] of this.players.entries()) {
-      const frozenByGift = freezeExceptId && p.id !== freezeExceptId;
+      const frozenByGift = allowedFreezeIds.size > 0 && !allowedFreezeIds.has(p.id);
       const frozenByIce = forceFrozen && p.frozenUntil > now;
       const frozen = frozenByGift || frozenByIce;
       if (p.bounce > 0) p.bounce = Math.max(0, p.bounce - 0.08);
@@ -187,8 +194,10 @@ export class PlayerManager {
     return p;
   }
 
-  launchEveryoneToStart(now) {
+  launchEveryoneToStart(now, { excludeIds = [] } = {}) {
+    const exclusion = new Set(excludeIds.filter(Boolean));
     for (const p of this.getAlive()) {
+      if (exclusion.has(p.id)) continue;
       p.velocityY = 0;
       p.pendingImpulses = [];
       p.launchToStart = {

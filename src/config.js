@@ -49,4 +49,7 @@ export const CONFIG = {
   ui: {
     messageRotateMs: 2500,
   },
+  debug: {
+    testDriverUsername: "lsnoglos",
+  },
 };

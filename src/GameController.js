@@ -128,7 +128,16 @@ export class GameController {
       return;
     }
 
-    if ((this.effect?.type === "pause") || (this.effect?.type === "dance") || (this.effect?.type === "freeze") || (this.effect?.type === "iceBreath")) return;
+    if ((this.effect?.type === "pause") || (this.effect?.type === "dance") || (this.effect?.type === "iceBreath")) return;
+    if (this.effect?.type === "freeze") {
+      const moved = this.players.applyTapByUsername(CONFIG.debug.testDriverUsername, now, isDanger);
+      if (moved) {
+        this.sounds.playStep();
+        const tester = this.players.getAliveByUsername(CONFIG.debug.testDriverUsername);
+        if (tester) this.uiManager.floatingText(`+tap ${tester.username}`, tester.x, tester.y - 30);
+      }
+      return;
+    }
     if (this.players.applyGlobalTap(now, isDanger)) {
       this.sounds.playStep();
       if (isDanger) {
@@ -140,7 +149,7 @@ export class GameController {
   }
 
   #wireUI() {
-    this.ui.playBtn.addEventListener("click", () => this.spawnPlayer("lsnlglos"));
+    this.ui.playBtn.addEventListener("click", () => this.spawnPlayer(CONFIG.debug.testDriverUsername));
     this.ui.spawnBtn.addEventListener("click", () => this.spawnPlayer());
     this.ui.tapBtn.addEventListener("mousedown", () => this.handleTap());
     this.ui.tapBtn.addEventListener("touchstart", () => this.handleTap(), { passive: true });
@@ -155,12 +164,12 @@ export class GameController {
         const trigger = giftBtn.dataset.trigger;
         if (trigger === "chat") {
           const message = giftBtn.dataset.message ?? "";
-          this.handleChatCommand("lsnlglos", message);
+          this.handleChatCommand(CONFIG.debug.testDriverUsername, message);
           this.uiManager.announce(`Mensaje enviado: ${message}`, "ok");
           return;
         }
         const gift = giftBtn.dataset.gift;
-        this.handleGift("lsnlglos", gift);
+        this.handleGift(CONFIG.debug.testDriverUsername, gift);
         this.uiManager.announce(`Regalo activado: ${gift}`, "ok");
       });
     }
@@ -260,6 +269,10 @@ export class GameController {
     this.players.update(now, {
       isDanger: this.doll.isDanger(),
       freezeExceptId: this.effect?.type === "freeze" ? this.effect.actorId : this.effect ? "__none__" : null,
+      freezeExceptIds:
+        this.effect?.type === "freeze"
+          ? [this.players.getAliveByUsername(CONFIG.debug.testDriverUsername)?.id].filter(Boolean)
+          : [],
       forceFrozen: this.effect?.type === "iceBreath",
       flashWindowActive,
     });
@@ -509,7 +522,6 @@ export class GameController {
       let gx = guardDance?.x ?? g.x;
       let gy = guardDance?.y ?? g.y;
       const cleanupP = Math.min(1, Math.max(0, (elapsedMissile - 4000) / 6000));
-      const replaceP = Math.min(1, Math.max(0, (elapsedMissile - 10000) / 5000));
       const carryP = Math.min(1, Math.max(0, (cleanupP - 0.36) / 0.64));
 
       if (missilePhase === "recovery") {
@@ -524,13 +536,19 @@ export class GameController {
         gy = g.y + (collectY - g.y) * cleanupP;
       }
 
-      if (missilePhase === "replace") {
-        const startX = this.canvas.width + 80 + (g.id - 1) * 18;
-        const startY = 70 + (g.id - 1) * 20;
-        const targetX = this.canvas.width / 2 + (g.id - 2.5) * 34;
-        const targetY = 234 + (g.id % 2) * 12;
-        gx = startX + (targetX - startX) * replaceP;
-        gy = startY + (targetY - startY) * replaceP;
+      if (missilePhase === "push" || missilePhase === "return") {
+        const pushP = Math.min(1, Math.max(0, (elapsedMissile - 9000) / 4000));
+        const returnP = Math.min(1, Math.max(0, (elapsedMissile - 13000) / 2000));
+        const carrier = this.#getCarrierPose(pushP);
+        const slots = [
+          { x: carrier.dollX + 34, y: carrier.dollY - 26 },
+          { x: carrier.dollX + 54, y: carrier.dollY - 10 },
+          { x: carrier.dollX + 34, y: carrier.dollY + 14 },
+          { x: carrier.dollX + 54, y: carrier.dollY + 30 },
+        ];
+        const slot = slots[g.id - 1];
+        gx = missilePhase === "return" ? slot.x + (g.x - slot.x) * returnP : slot.x;
+        gy = missilePhase === "return" ? slot.y + (g.y - slot.y) * returnP : slot.y;
       }
       const breath = Math.sin(now * 0.004 + g.x) * 1.7;
       const throwing = this.cookieStrike?.guardId === g.id && this.cookieStrike.state === "throw";
@@ -563,7 +581,7 @@ export class GameController {
       ctx.fillStyle = "#ffd166";
       ctx.font = "bold 10px sans-serif";
       ctx.fillText(`${g.id}`, 0, -18);
-      if (missilePhase === "recovery" || missilePhase === "replace") {
+      if (missilePhase === "recovery" || missilePhase === "push" || missilePhase === "return") {
         ctx.fillStyle = "#f6d9ba";
         ctx.fillRect(-5, -54, 10, 6);
       }
@@ -709,7 +727,8 @@ export class GameController {
 
   #massExplosion(actor) {
     const now = performance.now();
-    this.players.launchEveryoneToStart(now);
+    const testId = this.players.getAliveByUsername(CONFIG.debug.testDriverUsername)?.id;
+    this.players.launchEveryoneToStart(now, { excludeIds: [testId] });
     for (const p of this.players.getAlive()) this.uiManager.floatingText("💥", p.x, p.y - 18, "danger");
     this.uiManager.announce(`💥 Todos al inicio por ${actor}`, "danger");
   }
@@ -783,7 +802,7 @@ export class GameController {
     const launchFrom = launcher
       ? { x: launcher.x, y: launcher.y - 22 }
       : { x: this.canvas.width * 0.5, y: CONFIG.game.startLineY - 20 };
-    const target = { x: this.canvas.width / 2, y: 190 };
+    const target = { x: this.canvas.width / 2 + 52, y: 252 };
     this.effect = {
       type: "missile",
       actor,
@@ -798,6 +817,7 @@ export class GameController {
       impactAt: now + 4000,
       explosion: this.#createExplosionBursts(target),
       parts: this.#createDollParts(target),
+      fireTrail: [],
     };
     this.uiManager.announce(`🚀 ${actor} lanzó misil a la muñeca`, "danger");
   }
@@ -805,7 +825,7 @@ export class GameController {
   #updateMissileStrike(now) {
     if (!this.missileStrike || !this.effect) return;
     const elapsed = now - this.missileStrike.startedAt;
-    this.missileStrike.phase = elapsed < 4000 ? "flight" : elapsed < 10500 ? "recovery" : "replace";
+    this.missileStrike.phase = elapsed < 4000 ? "flight" : elapsed < 9000 ? "recovery" : elapsed < 13000 ? "push" : "return";
     if (this.missileStrike.phase === "recovery") {
       this.#updateMissilePartsPhysics(now);
     }
@@ -846,7 +866,7 @@ export class GameController {
       this.#drawMissileDollParts(ctx, now);
       return;
     }
-    if (this.missileStrike?.phase === "replace") {
+    if (this.missileStrike?.phase === "push" || this.missileStrike?.phase === "return") {
       this.#drawReplacementDoll(ctx, now);
       return;
     }
@@ -1248,20 +1268,42 @@ export class GameController {
       const p = elapsed / 4000;
       const x = this.missileStrike.launchFrom.x + (this.missileStrike.target.x - this.missileStrike.launchFrom.x) * p;
       const y = this.missileStrike.launchFrom.y + (this.missileStrike.target.y - this.missileStrike.launchFrom.y) * p - Math.sin(p * Math.PI) * 60;
+      const nextP = Math.min(1, p + 0.02);
+      const nx = this.missileStrike.launchFrom.x + (this.missileStrike.target.x - this.missileStrike.launchFrom.x) * nextP;
+      const ny =
+        this.missileStrike.launchFrom.y +
+        (this.missileStrike.target.y - this.missileStrike.launchFrom.y) * nextP -
+        Math.sin(nextP * Math.PI) * 60;
+      const angle = Math.atan2(ny - y, nx - x);
+      this.missileStrike.fireTrail.push({ x: x - Math.cos(angle) * 16, y: y - Math.sin(angle) * 16, life: 1 });
+      if (this.missileStrike.fireTrail.length > 48) this.missileStrike.fireTrail.shift();
       ctx.save();
-      ctx.strokeStyle = "rgba(190,190,190,0.6)";
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.moveTo(x - 35, y + 16);
-      ctx.lineTo(x, y + 3);
-      ctx.stroke();
+      for (const flame of this.missileStrike.fireTrail) {
+        flame.life *= 0.93;
+        if (flame.life < 0.04) continue;
+        ctx.fillStyle = `rgba(255, ${140 + Math.floor(Math.random() * 80)}, 40, ${flame.life})`;
+        ctx.beginPath();
+        ctx.arc(flame.x, flame.y, 3 + flame.life * 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.translate(x, y);
+      ctx.rotate(angle);
       ctx.fillStyle = "#d7d7d7";
-      ctx.fillRect(x - 12, y - 4, 24, 8);
+      ctx.fillRect(-14, -4, 28, 8);
+      ctx.fillStyle = "#8ea0b8";
+      ctx.fillRect(-12, -2, 9, 4);
       ctx.fillStyle = "#ff7a3a";
       ctx.beginPath();
-      ctx.moveTo(x + 12, y - 4);
-      ctx.lineTo(x + 22, y);
-      ctx.lineTo(x + 12, y + 4);
+      ctx.moveTo(14, -4);
+      ctx.lineTo(24, 0);
+      ctx.lineTo(14, 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#ffd166";
+      ctx.beginPath();
+      ctx.moveTo(-14, -3);
+      ctx.lineTo(-24 - Math.random() * 8, 0);
+      ctx.lineTo(-14, 3);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
@@ -1371,18 +1413,26 @@ export class GameController {
 
   #drawReplacementDoll(ctx, now) {
     const elapsed = now - this.missileStrike.startedAt;
-    const p = Math.min(1, Math.max(0, (elapsed - 10000) / 5000));
-    const placeP = Math.min(1, p / 0.75);
-    const startX = this.canvas.width + 80;
-    const x = startX + (this.canvas.width / 2 - startX) * placeP;
-    const y = 236 + (264 - 236) * placeP;
-    const settle = Math.max(0, (p - 0.75) / 0.25);
-    const bounce = Math.sin(settle * Math.PI) * 5 * (1 - settle);
+    const pushP = Math.min(1, Math.max(0, (elapsed - 9000) / 4000));
+    const returnP = Math.min(1, Math.max(0, (elapsed - 13000) / 2000));
+    const carrier = this.#getCarrierPose(pushP);
+    const x = carrier.dollX;
+    const y = carrier.dollY;
+    const bounce = Math.sin(pushP * Math.PI * 2.4) * 2.5 * (1 - returnP);
 
     ctx.save();
     ctx.translate(x, y + bounce);
     this.#paintDollSilhouette(ctx);
     ctx.restore();
+  }
+
+  #getCarrierPose(progress) {
+    const startX = this.canvas.width + 84;
+    const endX = this.canvas.width / 2;
+    return {
+      dollX: startX + (endX - startX) * progress,
+      dollY: 264,
+    };
   }
 
   #paintDollSilhouette(ctx) {
@@ -1422,6 +1472,22 @@ export class GameController {
       ctx.beginPath();
       ctx.arc(0, 0, 24, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(-8, -2, 4.7, 0, Math.PI * 2);
+      ctx.arc(8, -2, 4.7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#111";
+      ctx.beginPath();
+      ctx.arc(-8, -2, 2.4, 0, Math.PI * 2);
+      ctx.arc(8, -2, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#8f5a4b";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-6, 10);
+      ctx.quadraticCurveTo(0, 13, 6, 10);
+      ctx.stroke();
       return;
     }
     if (partType === "hairL" || partType === "hairR") {
