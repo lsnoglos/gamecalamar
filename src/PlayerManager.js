@@ -30,6 +30,7 @@ export class PlayerManager {
       pendingImpulses: [],
       explosionParticles: [],
       frozenUntil: 0,
+      launchToStart: null,
     };
     this.players.set(id, player);
     return player;
@@ -85,9 +86,9 @@ export class PlayerManager {
     this.players.delete(id);
   }
 
-  update(now, { isDanger = false, freezeExcept = null, forceFrozen = false, flashWindowActive = false } = {}) {
+  update(now, { isDanger = false, freezeExceptId = null, forceFrozen = false, flashWindowActive = false } = {}) {
     for (const [id, p] of this.players.entries()) {
-      const frozenByGift = freezeExcept && p.username !== freezeExcept;
+      const frozenByGift = freezeExceptId && p.id !== freezeExceptId;
       const frozenByIce = forceFrozen && p.frozenUntil > now;
       const frozen = frozenByGift || frozenByIce;
       if (p.bounce > 0) p.bounce = Math.max(0, p.bounce - 0.08);
@@ -119,6 +120,21 @@ export class PlayerManager {
         }
         p.velocityY *= CONFIG.player.speedDamping;
         if (p.velocityY < 0.02) p.velocityY = 0;
+      }
+
+      if (p.launchToStart) {
+        const arc = p.launchToStart;
+        const progress = Math.min(1, (now - arc.startedAt) / arc.durationMs);
+        const rise = Math.sin(progress * Math.PI) * arc.height;
+        p.x = lerp(arc.fromX, arc.toX, progress);
+        p.y = lerp(arc.fromY, arc.toY, progress) - rise;
+        if (progress >= 1) {
+          p.x = arc.toX;
+          p.y = arc.toY;
+          p.velocityY = 0;
+          p.pendingImpulses = [];
+          p.launchToStart = null;
+        }
       }
 
       if (p.state === "winner") {
@@ -169,6 +185,22 @@ export class PlayerManager {
     if (!p) return null;
     p.shields += amount;
     return p;
+  }
+
+  launchEveryoneToStart(now) {
+    for (const p of this.getAlive()) {
+      p.velocityY = 0;
+      p.pendingImpulses = [];
+      p.launchToStart = {
+        fromX: p.x,
+        fromY: p.y,
+        toX: this.#lanePosition(),
+        toY: CONFIG.game.startLineY,
+        startedAt: now,
+        durationMs: 900 + Math.random() * 500,
+        height: 85 + Math.random() * 90,
+      };
+    }
   }
 
   applyIceBreath(now, pushBackPercent) {
