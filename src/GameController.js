@@ -114,14 +114,16 @@ export class GameController {
   handleTap(username) {
     this.sounds.enable();
     const now = performance.now();
-    const isDanger = this.doll.isDanger();
+    const isDanger = this.doll.isDanger() && !this.#isDangerSuppressed();
+    const freezeActorSlowdown = this.effect?.type === "freeze" ? 0.65 : 1;
 
     if (username) {
       const candidate = this.players.getAliveByUsername(username);
       if (this.effect?.type === "freeze" && candidate && this.effect.actorId !== candidate.id) return;
       if (this.effect?.type === "iceBreath") return;
       if (this.effect?.type === "pause" || this.effect?.type === "dance") return;
-      if (candidate && this.players.applyTap(candidate.id, now, isDanger)) {
+      const speedScale = this.effect?.type === "freeze" && candidate && this.effect.actorId === candidate.id ? freezeActorSlowdown : 1;
+      if (candidate && this.players.applyTap(candidate.id, now, isDanger, speedScale)) {
         this.sounds.playStep();
         this.uiManager.floatingText(`+tap ${candidate.username}`, candidate.x, candidate.y - 30);
       }
@@ -130,7 +132,7 @@ export class GameController {
 
     if ((this.effect?.type === "pause") || (this.effect?.type === "dance") || (this.effect?.type === "iceBreath")) return;
     if (this.effect?.type === "freeze") {
-      const moved = this.players.applyTapByUsername(CONFIG.debug.testDriverUsername, now, isDanger);
+      const moved = this.players.applyTapByUsername(CONFIG.debug.testDriverUsername, now, isDanger, freezeActorSlowdown);
       if (moved) {
         this.sounds.playStep();
         const tester = this.players.getAliveByUsername(CONFIG.debug.testDriverUsername);
@@ -216,7 +218,9 @@ export class GameController {
     }
 
     if (stateEvent === "danger") {
-      if (this.#shouldTriggerIceBreath()) {
+      if (this.#isDangerSuppressed()) {
+        this.#interruptDollThreat(now);
+      } else if (this.#shouldTriggerIceBreath()) {
         this.#startIceBreath(now);
       } else {
         this.#eliminateFlashViolators(now);
@@ -239,7 +243,8 @@ export class GameController {
       this.dangerGraceEndsAt = 0;
     }
 
-    if (this.doll.isScanning()) {
+    const scanActive = this.#isScanActive();
+    if (scanActive) {
       const scanningFor = now - this.dangerSinceAt;
       this.aggressiveScan = scanningFor >= CONFIG.game.cone.aggressiveAfterMs;
       this.aggressiveProgress = Math.min(1, scanningFor / 1600);
@@ -250,14 +255,14 @@ export class GameController {
     }
 
     this.vision.update(now, {
-      scanning: this.doll.isScanning(),
+      scanning: scanActive,
       aggressive: this.aggressiveScan,
       aggressiveProgress: this.aggressiveProgress,
     });
     this.dollPose = this.#computeDollPose(now);
     this.vision.setOrigin(this.dollPose.eyeCenter);
 
-    if (this.doll.isScanning()) {
+    if (scanActive) {
       this.#scanAndEliminate(now);
     }
 
@@ -267,12 +272,9 @@ export class GameController {
     }
 
     this.players.update(now, {
-      isDanger: this.doll.isDanger(),
+      isDanger: this.doll.isDanger() && !this.#isDangerSuppressed(),
       freezeExceptId: this.effect?.type === "freeze" ? this.effect.actorId : this.effect ? "__none__" : null,
-      freezeExceptIds:
-        this.effect?.type === "freeze"
-          ? [this.players.getAliveByUsername(CONFIG.debug.testDriverUsername)?.id].filter(Boolean)
-          : [],
+      freezeExceptIds: this.effect?.type === "freeze" ? [this.effect.actorId].filter(Boolean) : [],
       forceFrozen: this.effect?.type === "iceBreath",
       flashWindowActive,
     });
@@ -297,7 +299,7 @@ export class GameController {
       const inCriticalZone = mover.y <= criticalY;
       if (inCriticalZone || this.vision.isPointInside({ x: mover.x, y: mover.y })) {
         const eliminated = this.players.eliminatePlayer(mover.id, now);
-        if (eliminated?.blockedByShield) {
+        if (eliminated?.blockedByShield && eliminated.shieldConsumed) {
           this.uiManager.announce(`🛡️ ${mover.username} bloqueó el disparo`, "ok");
         } else if (eliminated?.player) {
           this.sounds.playElimination();
@@ -367,7 +369,7 @@ export class GameController {
 
     this.#drawField(ctx, now);
     this.#drawCookieWarning(ctx, now);
-    if (this.doll.isScanning()) this.#drawVisionCone(ctx, now);
+    if (this.#isScanActive()) this.#drawVisionCone(ctx, now);
     this.#drawGuards(ctx, now);
     this.#drawDoll(ctx, now);
     this.#drawPlayers(ctx, now);
@@ -690,7 +692,7 @@ export class GameController {
       const distance = Math.hypot(p.x - this.cookieStrike.x, p.y - this.cookieStrike.y);
       if (distance > blastRadius) continue;
       const eliminated = this.players.eliminatePlayer(p.id, now);
-      if (eliminated?.blockedByShield) {
+      if (eliminated?.blockedByShield && eliminated.shieldConsumed) {
         this.uiManager.announce(`🛡️ ${p.username} resistió la bola`, "ok");
       } else if (eliminated?.player) {
         this.uiManager.announce(`${eliminated.player.username} fue alcanzado por la bola`, "danger");
@@ -709,24 +711,30 @@ export class GameController {
   }
 
   #activateEffect(type, durationMs, actor) {
+    const now = performance.now();
     const actorPlayer = actor ? this.players.getAliveByUsername(actor) : null;
     this.effect = {
       type,
       actor,
       actorId: actorPlayer?.id ?? null,
       durationMs,
-      endsAt: performance.now() + durationMs,
+      endsAt: now + durationMs,
     };
     if (type === "dance") {
+      this.#interruptDollThreat(now);
       this.uiManager.announce("💃 La muñeca se puso a bailar", "ok");
       this.sounds.playDance();
     }
-    if (type === "freeze") this.uiManager.announce(`❄️ Tiempo detenido por ${actor}`, "danger");
+    if (type === "freeze") {
+      this.#interruptDollThreat(now);
+      this.uiManager.announce(`❄️ Tiempo detenido 10s por ${actor}`, "danger");
+    }
     if (type === "pause") this.uiManager.announce("⏸️ Juego en pausa", "neutral");
   }
 
   #massExplosion(actor) {
     const now = performance.now();
+    this.#interruptDollThreat(now);
     const testId = this.players.getAliveByUsername(CONFIG.debug.testDriverUsername)?.id;
     this.players.launchEveryoneToStart(now, { excludeIds: [testId] });
     for (const p of this.players.getAlive()) this.uiManager.floatingText("💥", p.x, p.y - 18, "danger");
@@ -736,7 +744,7 @@ export class GameController {
   #effectLabel() {
     if (!this.effect) return "";
     if (this.effect.type === "dance") return "Baile";
-    if (this.effect.type === "freeze") return "Tiempo detenido";
+    if (this.effect.type === "freeze") return "Congelar 10s";
     if (this.effect.type === "pause") return "Pausa";
     if (this.effect.type === "iceBreath") return "Soplo de hielo";
     if (this.effect.type === "missile") return "Misil";
@@ -787,7 +795,7 @@ export class GameController {
   #eliminateFlashViolators(now) {
     for (const mover of this.players.getFlashViolators()) {
       const eliminated = this.players.eliminatePlayer(mover.id, now);
-      if (eliminated?.blockedByShield) {
+      if (eliminated?.blockedByShield && eliminated.shieldConsumed) {
         this.uiManager.announce(`🛡️ ${mover.username} resistió el escaneo`, "ok");
       } else if (eliminated?.player) {
         this.sounds.playElimination();
@@ -815,6 +823,7 @@ export class GameController {
       target,
       phase: "flight",
       impactAt: now + 4000,
+      impactHandled: false,
       explosion: this.#createExplosionBursts(target),
       parts: this.#createDollParts(target),
       fireTrail: [],
@@ -825,10 +834,33 @@ export class GameController {
   #updateMissileStrike(now) {
     if (!this.missileStrike || !this.effect) return;
     const elapsed = now - this.missileStrike.startedAt;
+    if (!this.missileStrike.impactHandled && now >= this.missileStrike.impactAt) {
+      this.missileStrike.impactHandled = true;
+      this.#interruptDollThreat(now);
+    }
     this.missileStrike.phase = elapsed < 4000 ? "flight" : elapsed < 9000 ? "recovery" : elapsed < 13000 ? "push" : "return";
     if (this.missileStrike.phase === "recovery") {
       this.#updateMissilePartsPhysics(now);
     }
+  }
+
+  #isDangerSuppressed() {
+    return this.effect?.type === "dance" || this.effect?.type === "freeze";
+  }
+
+  #isScanActive() {
+    if (this.#isDangerSuppressed()) return false;
+    return this.doll.isScanning();
+  }
+
+  #interruptDollThreat(now) {
+    this.doll.forceSafe(now);
+    this.aggressiveScan = false;
+    this.aggressiveProgress = 0;
+    this.dangerSinceAt = 0;
+    this.dangerGraceEndsAt = 0;
+    this.uiManager.setDangerMode(false);
+    this.players.clearDangerMovementFlags();
   }
 
   #createClouds(amount) {
@@ -957,7 +989,7 @@ export class GameController {
     ctx.fill();
 
     const iceBreathOn = this.effect?.type === "iceBreath" && frontVisible > 0.35;
-    const firingLaser = this.doll.isScanning() && !iceBreathOn && frontVisible > 0.35;
+    const firingLaser = this.#isScanActive() && !iceBreathOn && frontVisible > 0.35;
     ctx.fillStyle = firingLaser ? "#ffd1d1" : "#fff";
     ctx.beginPath();
     ctx.arc(-8, -2, 5.3, 0, Math.PI * 2);
@@ -1063,7 +1095,7 @@ export class GameController {
     const dancing = this.effect?.type === "dance";
     const bob = dancing ? Math.sin(now * 0.018) * 8 : this.doll.state === "safe" ? Math.sin(now * 0.006) * 1.4 : 0;
     const turnP = this.doll.turnProgress(now);
-    const scanning = this.doll.isScanning();
+    const scanning = this.#isScanActive();
     const scanHeadRotation = this.vision.getDirection() - Math.PI / 2;
     const headRotation = dancing
       ? 0
@@ -1172,11 +1204,15 @@ export class GameController {
   #drawPlayers(ctx, now) {
     for (const p of this.players.getAll()) {
       const walkBounce = p.bounce > 0 ? Math.sin(now * 0.03) * 4 * p.bounce : 0;
-      const highlighted = this.doll.isScanning() && this.vision.isPointInside({ x: p.x, y: p.y }) && p.state === "alive";
+      const highlighted = this.#isScanActive() && this.vision.isPointInside({ x: p.x, y: p.y }) && p.state === "alive";
       const frozen = p.frozenUntil > now;
+      const shieldBlinking = p.shieldBlinkUntil > now;
 
       ctx.save();
       ctx.translate(p.x, p.y + walkBounce);
+      if (shieldBlinking && Math.floor(now / 130) % 2 === 0) {
+        ctx.globalAlpha = 0.35;
+      }
 
       if (p.state === "eliminated") {
         const t = Math.min(1, (now - p.eliminatedAt) / CONFIG.player.eliminationFadeMs);
@@ -1242,10 +1278,15 @@ export class GameController {
         ctx.font = "bold 13px sans-serif";
         ctx.fillText(`🛡️${p.shields}`, p.x, p.y - 42);
       }
+      if (shieldBlinking && p.state === "alive") {
+        ctx.fillStyle = "#d9f6ff";
+        ctx.font = "bold 12px sans-serif";
+        ctx.fillText(`✨ ${Math.ceil((p.shieldBlinkUntil - now) / 1000)}s`, p.x, p.y - 55);
+      }
       if (frozen && p.state === "alive") {
         ctx.fillStyle = "#bdefff";
         ctx.font = "bold 12px sans-serif";
-        ctx.fillText(`🧊 ${Math.ceil((p.frozenUntil - now) / 1000)}s`, p.x, p.y - 55);
+        ctx.fillText(`🧊 ${Math.ceil((p.frozenUntil - now) / 1000)}s`, p.x, p.y - (shieldBlinking ? 68 : 55));
       }
     }
   }

@@ -47,6 +47,10 @@ export class DollAI {
     this.turnStartAt += deltaMs;
   }
 
+  forceSafe(now) {
+    this.#setSafe(now);
+  }
+
   #setSafe(now) {
     this.state = "safe";
     this.rotation = Math.PI;
