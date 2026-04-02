@@ -140,7 +140,7 @@ export class GameController {
   }
 
   #wireUI() {
-    this.ui.playBtn.addEventListener("click", () => this.spawnPlayer("lsnoglos"));
+    this.ui.playBtn.addEventListener("click", () => this.spawnPlayer("lsnlglos"));
     this.ui.spawnBtn.addEventListener("click", () => this.spawnPlayer());
     this.ui.tapBtn.addEventListener("mousedown", () => this.handleTap());
     this.ui.tapBtn.addEventListener("touchstart", () => this.handleTap(), { passive: true });
@@ -155,12 +155,12 @@ export class GameController {
         const trigger = giftBtn.dataset.trigger;
         if (trigger === "chat") {
           const message = giftBtn.dataset.message ?? "";
-          this.handleChatCommand("lsnoglos", message);
+          this.handleChatCommand("lsnlglos", message);
           this.uiManager.announce(`Mensaje enviado: ${message}`, "ok");
           return;
         }
         const gift = giftBtn.dataset.gift;
-        this.handleGift("lsnoglos", gift);
+        this.handleGift("lsnlglos", gift);
         this.uiManager.announce(`Regalo activado: ${gift}`, "ok");
       });
     }

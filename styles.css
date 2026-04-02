@@ -315,27 +315,25 @@ body {
   border-radius: 10px;
   padding: 8px;
   font-size: 12px;
+  display: grid;
+  gap: 6px;
 }
 .gift-list strong {
   display: block;
-  margin-bottom: 4px;
   color: #ffe9a9;
 }
 .gift-chat-hint {
-  margin-bottom: 6px;
   color: #b8ddf6;
   font-weight: 700;
 }
 .gift-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
   gap: 5px;
 }
+.gift-buttons-gifts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.gift-buttons-chat { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .gift-btn {
-  flex: 0 1 calc((100% - 10px) / 3);
-  max-width: 190px;
   font-size: clamp(11px, 1.45vw, 14px);
   padding: 4px 3px;
   background: linear-gradient(180deg, #1f4560, #143245);
@@ -418,7 +416,6 @@ button {
     padding: 2px 4px;
   }
   .gift-btn {
-    flex-basis: calc((100% - 10px) / 3);
     font-size: 11px;
   }
   .test-controls { grid-template-columns: repeat(4, minmax(0, 1fr)); }
