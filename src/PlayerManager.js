@@ -31,17 +31,19 @@ export class PlayerManager {
       explosionParticles: [],
       frozenUntil: 0,
       launchToStart: null,
+      shieldBlinkUntil: 0,
     };
     this.players.set(id, player);
     return player;
   }
 
-  applyTap(id, now, isDanger) {
+  applyTap(id, now, isDanger, speedScale = 1) {
     const p = this.players.get(id);
     if (!p || p.state !== "alive") return false;
     p.pendingImpulses.push({
       dueAt: now + CONFIG.player.tapDelayMs,
       danger: isDanger,
+      speedScale,
     });
     return true;
   }
@@ -59,18 +61,22 @@ export class PlayerManager {
     return moved;
   }
 
-  applyTapByUsername(username, now, isDanger) {
+  applyTapByUsername(username, now, isDanger, speedScale = 1) {
     const p = this.getAliveByUsername(username);
     if (!p) return false;
-    return this.applyTap(p.id, now, isDanger);
+    return this.applyTap(p.id, now, isDanger, speedScale);
   }
 
   eliminatePlayer(id, now, { bypassShield = false } = {}) {
     const p = this.players.get(id);
     if (!p || p.state !== "alive") return null;
+    if (!bypassShield && p.shieldBlinkUntil > now) {
+      return { player: p, blockedByShield: true, shieldConsumed: false };
+    }
     if (!bypassShield && p.shields > 0) {
       p.shields -= 1;
-      return { player: p, blockedByShield: true };
+      p.shieldBlinkUntil = now + 3000;
+      return { player: p, blockedByShield: true, shieldConsumed: true };
     }
     p.state = "eliminated";
     p.eliminatedAt = now;
@@ -101,7 +107,8 @@ export class PlayerManager {
       if (p.bounce > 0) p.bounce = Math.max(0, p.bounce - 0.08);
       while (!frozen && p.pendingImpulses.length > 0 && p.pendingImpulses[0].dueAt <= now) {
         const impulse = p.pendingImpulses.shift();
-        p.velocityY += CONFIG.player.speedPerTap;
+        const speedScale = impulse?.speedScale ?? 1;
+        p.velocityY += CONFIG.player.speedPerTap * speedScale;
         p.lastMoveAt = now;
         p.bounce = 1;
         if (impulse?.danger) p.movedInDanger = true;
