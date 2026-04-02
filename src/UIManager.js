@@ -17,12 +17,14 @@ export class UIManager {
     this.ui.rankingList.innerHTML = "";
     for (let i = 0; i < 10; i += 1) {
       const li = document.createElement("li");
+      li.className = "ranking-row";
       const row = ranking[i];
-      if (!row) {
-        li.textContent = "—";
-      } else {
-        li.textContent = `${truncateName(row.username)} ${row.wins}`;
-      }
+      const level = row?.level ?? i + 1;
+      li.innerHTML = `
+        <span class="col-level">${level}</span>
+        <span class="col-player">${row?.username ? truncateName(row.username) : "—"}</span>
+        <span class="col-wins">${row?.wins ? row.wins : "—"}</span>
+      `;
       this.ui.rankingList.appendChild(li);
     }
 
@@ -30,7 +32,7 @@ export class UIManager {
     for (let i = 0; i < 3; i += 1) {
       const li = document.createElement("li");
       const row = monthlyWinners[i];
-      li.textContent = row ? `${truncateName(row.username)} ${row.wins}` : "—";
+      li.textContent = row ? `Lvl ${row.level} ${truncateName(row.username)} ${row.wins}` : "—";
       this.ui.monthlyList.appendChild(li);
     }
   }
