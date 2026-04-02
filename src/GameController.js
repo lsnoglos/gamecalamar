@@ -54,6 +54,7 @@ export class GameController {
       onJoinCommand: (username) => this.spawnPlayer(username),
       onGift: (username, gift) => this.handleGift(username, gift),
       onTap: (username) => this.handleTap(username),
+      onChatCommand: (username, message) => this.handleChatCommand(username, message),
     });
     this.bridge.connectGlobalBridge();
 
@@ -88,13 +89,26 @@ export class GameController {
     const normalized = (gift ?? "").toLowerCase();
     if (normalized === "rose" || normalized === "rosa") {
       const p = this.players.addShieldByUsername(username, 1);
-      if (p) this.uiManager.announce(`🌹 +1 escudo para ${username} (${p.shields})`, "ok");
+      if (p) this.uiManager.announce(`🌹 +1 escudo protector para ${username} (${p.shields})`, "ok");
       return;
     }
     if (normalized === "corazon" || normalized === "heart") this.#activateEffect("freeze", 10000, username);
-    if (normalized === "sombrero" || normalized === "hat") this.#massExplosion(username);
-    if (normalized === "dona" || normalized === "donut") this.#activateMissileStrike(username);
-    if (normalized === "otros" || normalized === "others") this.#activateEffect("dance", 25000, username);
+    if (normalized === "gorra" || normalized === "cap" || normalized === "sombrero" || normalized === "hat") this.#massExplosion(username);
+  }
+
+  handleChatCommand(username, message) {
+    const normalized = (message ?? "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+    if (normalized === "misil a muneca" || normalized === "lanza misil a la muneca") {
+      this.#activateMissileStrike(username);
+      return;
+    }
+    if (normalized === "pon a bailar a la muneca" || normalized === "muneca baila") {
+      this.#activateEffect("dance", 25000, username);
+    }
   }
 
   handleTap(username) {
@@ -103,10 +117,10 @@ export class GameController {
     const isDanger = this.doll.isDanger();
 
     if (username) {
-      if (this.effect?.type === "freeze" && this.effect.actor !== username) return;
+      const candidate = this.players.getAliveByUsername(username);
+      if (this.effect?.type === "freeze" && candidate && this.effect.actorId !== candidate.id) return;
       if (this.effect?.type === "iceBreath") return;
       if (this.effect?.type === "pause" || this.effect?.type === "dance") return;
-      const candidate = this.players.getAll().find((p) => p.username === username);
       if (candidate && this.players.applyTap(candidate.id, now, isDanger)) {
         this.sounds.playStep();
         this.uiManager.floatingText(`+tap ${candidate.username}`, candidate.x, candidate.y - 30);
@@ -138,6 +152,13 @@ export class GameController {
 
     for (const giftBtn of this.ui.giftButtons) {
       giftBtn.addEventListener("click", () => {
+        const trigger = giftBtn.dataset.trigger;
+        if (trigger === "chat") {
+          const message = giftBtn.dataset.message ?? "";
+          this.handleChatCommand("lsnoglos", message);
+          this.uiManager.announce(`Mensaje enviado: ${message}`, "ok");
+          return;
+        }
         const gift = giftBtn.dataset.gift;
         this.handleGift("lsnoglos", gift);
         this.uiManager.announce(`Regalo activado: ${gift}`, "ok");
@@ -238,7 +259,7 @@ export class GameController {
 
     this.players.update(now, {
       isDanger: this.doll.isDanger(),
-      freezeExcept: this.effect?.type === "freeze" ? this.effect.actor : this.effect ? "__none__" : null,
+      freezeExceptId: this.effect?.type === "freeze" ? this.effect.actorId : this.effect ? "__none__" : null,
       forceFrozen: this.effect?.type === "iceBreath",
       flashWindowActive,
     });
@@ -670,9 +691,11 @@ export class GameController {
   }
 
   #activateEffect(type, durationMs, actor) {
+    const actorPlayer = actor ? this.players.getAliveByUsername(actor) : null;
     this.effect = {
       type,
       actor,
+      actorId: actorPlayer?.id ?? null,
       durationMs,
       endsAt: performance.now() + durationMs,
     };
@@ -686,14 +709,9 @@ export class GameController {
 
   #massExplosion(actor) {
     const now = performance.now();
-    for (const p of this.players.getAlive()) {
-      if (p.username === actor) continue;
-      p.y = CONFIG.game.startLineY;
-      p.velocityY = 0;
-      p.pendingImpulses = [];
-      this.uiManager.floatingText("💥", p.x, p.y - 18, "danger");
-    }
-    this.uiManager.announce(`💥 Explosión masiva por ${actor}`, "danger");
+    this.players.launchEveryoneToStart(now);
+    for (const p of this.players.getAlive()) this.uiManager.floatingText("💥", p.x, p.y - 18, "danger");
+    this.uiManager.announce(`💥 Todos al inicio por ${actor}`, "danger");
   }
 
   #effectLabel() {

@@ -1,8 +1,9 @@
 export class EventBridge {
-  constructor({ onJoinCommand, onGift, onTap }) {
+  constructor({ onJoinCommand, onGift, onTap, onChatCommand }) {
     this.onJoinCommand = onJoinCommand;
     this.onGift = onGift;
     this.onTap = onTap;
+    this.onChatCommand = onChatCommand;
   }
 
   connectGlobalBridge() {
@@ -15,7 +16,11 @@ export class EventBridge {
       receiveChat: (payload) => {
         const username = payload?.username ?? `user_${Math.floor(Math.random() * 9999)}`;
         const message = (payload?.message ?? "").trim().toLowerCase();
-        if (message === "jugar") this.onJoinCommand(username);
+        if (message === "jugar") {
+          this.onJoinCommand(username);
+          return;
+        }
+        this.onChatCommand?.(username, message);
       },
       receiveTap: (payload) => {
         if (payload?.username) {

@@ -321,6 +321,11 @@ body {
   margin-bottom: 4px;
   color: #ffe9a9;
 }
+.gift-chat-hint {
+  margin-bottom: 6px;
+  color: #b8ddf6;
+  font-weight: 700;
+}
 .gift-buttons {
   display: flex;
   flex-wrap: wrap;
