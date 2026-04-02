@@ -1,13 +1,13 @@
 import { CONFIG } from "./config.js";
 
-const STORAGE_KEY = "gamecalamar_ranking_v1";
+const STORAGE_KEY = "gamecalamar_ranking_v2";
 
 export class RankingSystem {
   constructor() {
     this.winners = [];
     this.activeDay = currentGameDayKey();
     this.activeMonth = currentMonthKey();
-    this.dailyWins = new Map();
+    this.dailyWinsByLevel = new Map();
     this.monthlyWins = new Map();
 
     this.#loadFromStorage();
@@ -15,30 +15,43 @@ export class RankingSystem {
     this.#ensureMonthBoundary();
   }
 
-  registerWinner(player) {
+  registerWinner(player, level) {
     this.#ensureDayBoundary();
     this.#ensureMonthBoundary();
+    const safeLevel = normalizeLevel(level);
 
     const now = Date.now();
-    const currentDaily = this.dailyWins.get(player.username);
+    const levelMap = this.dailyWinsByLevel.get(safeLevel) ?? new Map();
+    const currentDaily = levelMap.get(player.username);
     const updatedDaily = {
       username: player.username,
+      level: safeLevel,
       wins: (currentDaily?.wins ?? 0) + 1,
       firstWinAt: currentDaily?.firstWinAt ?? now,
       lastWinAt: now,
+      reachedWinsAt: now,
     };
-
-    this.dailyWins.set(player.username, updatedDaily);
+    levelMap.set(player.username, updatedDaily);
+    this.dailyWinsByLevel.set(safeLevel, levelMap);
 
     const monthMap = this.monthlyWins.get(this.activeMonth) ?? new Map();
-    monthMap.set(player.username, (monthMap.get(player.username) ?? 0) + 1);
+    const monthlyRecord = monthMap.get(player.username) ?? {
+      username: player.username,
+      wins: 0,
+      levelWins: {},
+    };
+    monthlyRecord.wins += 1;
+    monthlyRecord.levelWins[safeLevel] = (monthlyRecord.levelWins[safeLevel] ?? 0) + 1;
+    monthMap.set(player.username, monthlyRecord);
     this.monthlyWins.set(this.activeMonth, monthMap);
 
+    const levelStanding = this.topWinners().find((row) => row.level === safeLevel);
     const result = {
       id: player.id,
       username: player.username,
+      level: safeLevel,
       timestamp: now,
-      place: this.winners.length + 1,
+      place: levelStanding ? levelStanding.position : 1,
       wins: updatedDaily.wins,
     };
 
@@ -49,24 +62,45 @@ export class RankingSystem {
 
   topWinners(limit = CONFIG.game.maxWinners) {
     this.#ensureDayBoundary();
-    return [...this.dailyWins.values()]
-      .sort((a, b) => b.wins - a.wins || a.lastWinAt - b.lastWinAt || a.firstWinAt - b.firstWinAt)
-      .slice(0, limit)
-      .map(({ username, wins }) => ({ username, wins }));
+    const board = [];
+    for (let level = 1; level <= limit; level += 1) {
+      const levelMap = this.dailyWinsByLevel.get(level);
+      const ranked = levelMap
+        ? [...levelMap.values()].sort(
+            (a, b) =>
+              b.wins - a.wins ||
+              a.reachedWinsAt - b.reachedWinsAt ||
+              a.firstWinAt - b.firstWinAt ||
+              a.username.localeCompare(b.username),
+          )
+        : [];
+      const leader = ranked[0];
+      board.push({
+        level,
+        username: leader?.username ?? "",
+        wins: leader?.wins ?? 0,
+        position: leader ? 1 : 0,
+      });
+    }
+    return board;
   }
 
   monthlyTop(limit = 3) {
     this.#ensureMonthBoundary();
     const monthMap = this.monthlyWins.get(this.activeMonth) ?? new Map();
     return [...monthMap.entries()]
-      .map(([username, wins]) => ({ username, wins }))
-      .sort((a, b) => b.wins - a.wins || a.username.localeCompare(b.username))
+      .map(([, data]) => ({
+        username: data.username,
+        wins: data.wins,
+        level: preferredLevel(data.levelWins),
+      }))
+      .sort((a, b) => b.wins - a.wins || a.level - b.level || a.username.localeCompare(b.username))
       .slice(0, limit);
   }
 
   hasDailyPlacementsToday() {
     this.#ensureDayBoundary();
-    return this.dailyWins.size > 0;
+    return [...this.dailyWinsByLevel.values()].some((levelMap) => levelMap.size > 0);
   }
 
   reset() {
@@ -84,7 +118,7 @@ export class RankingSystem {
     const currentDay = currentGameDayKey();
     if (this.activeDay === currentDay) return;
     this.activeDay = currentDay;
-    this.dailyWins.clear();
+    this.dailyWinsByLevel.clear();
     this.winners = [];
     this.#persist();
   }
@@ -107,19 +141,21 @@ export class RankingSystem {
       }
 
       if (Array.isArray(parsed?.dailyBoard)) {
-        this.dailyWins = new Map(
-          parsed.dailyBoard
-            .filter((row) => typeof row?.username === "string" && Number.isFinite(row?.wins))
-            .map((row) => [
-              row.username,
-              {
-                username: row.username,
-                wins: Number(row.wins),
-                firstWinAt: Number(row.firstWinAt) || Date.now(),
-                lastWinAt: Number(row.lastWinAt) || Date.now(),
-              },
-            ]),
-        );
+        this.dailyWinsByLevel = new Map();
+        for (const row of parsed.dailyBoard) {
+          if (typeof row?.username !== "string" || !Number.isFinite(row?.wins) || !Number.isFinite(row?.level)) continue;
+          const level = normalizeLevel(row.level);
+          const levelMap = this.dailyWinsByLevel.get(level) ?? new Map();
+          levelMap.set(row.username, {
+            username: row.username,
+            level,
+            wins: Number(row.wins),
+            firstWinAt: Number(row.firstWinAt) || Date.now(),
+            lastWinAt: Number(row.lastWinAt) || Date.now(),
+            reachedWinsAt: Number(row.reachedWinsAt) || Number(row.lastWinAt) || Date.now(),
+          });
+          this.dailyWinsByLevel.set(level, levelMap);
+        }
       }
 
       if (parsed?.monthlyBoard && typeof parsed.monthlyBoard === "object") {
@@ -130,7 +166,14 @@ export class RankingSystem {
               Array.isArray(entries)
                 ? entries
                     .filter((entry) => typeof entry?.username === "string" && Number.isFinite(entry?.wins))
-                    .map((entry) => [entry.username, Number(entry.wins)])
+                    .map((entry) => [
+                      entry.username,
+                      {
+                        username: entry.username,
+                        wins: Number(entry.wins),
+                        levelWins: entry?.levelWins && typeof entry.levelWins === "object" ? entry.levelWins : {},
+                      },
+                    ])
                 : [],
             ),
           ]),
@@ -147,13 +190,22 @@ export class RankingSystem {
 
     const monthlyBoard = {};
     for (const [monthKey, monthMap] of this.monthlyWins.entries()) {
-      monthlyBoard[monthKey] = [...monthMap.entries()].map(([username, wins]) => ({ username, wins }));
+      monthlyBoard[monthKey] = [...monthMap.values()].map((entry) => ({
+        username: entry.username,
+        wins: entry.wins,
+        levelWins: entry.levelWins,
+      }));
+    }
+
+    const dailyBoard = [];
+    for (const levelMap of this.dailyWinsByLevel.values()) {
+      dailyBoard.push(...levelMap.values());
     }
 
     const payload = {
       activeDay: this.activeDay,
       activeMonth: this.activeMonth,
-      dailyBoard: [...this.dailyWins.values()],
+      dailyBoard,
       monthlyBoard,
     };
 
@@ -179,4 +231,17 @@ function currentGameDayKey() {
 function currentMonthKey() {
   const date = new Date();
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function normalizeLevel(level) {
+  const parsed = Number(level);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.min(10, Math.max(1, Math.floor(parsed)));
+}
+
+function preferredLevel(levelWins) {
+  const entries = Object.entries(levelWins ?? {}).map(([level, wins]) => ({ level: Number(level), wins: Number(wins) }));
+  if (!entries.length) return 1;
+  entries.sort((a, b) => b.wins - a.wins || a.level - b.level);
+  return entries[0].level;
 }

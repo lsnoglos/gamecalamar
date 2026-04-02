@@ -278,7 +278,7 @@ export class GameController {
   #checkGoal(now) {
     for (const p of this.players.getAlive()) {
       if (p.y > CONFIG.game.finishLineY + CONFIG.game.finishWindow) continue;
-      const registered = this.ranking.registerWinner(p);
+      const registered = this.ranking.registerWinner(p, this.level);
       if (!registered) continue;
 
       const goalY = p.y;

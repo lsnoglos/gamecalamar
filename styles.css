@@ -66,11 +66,11 @@ body {
   border: 3px solid transparent;
   border-radius: 12px;
   padding: 10px 12px;
-  min-height: 180px;
-  max-height: 100%;
-  align-self: start;
-  position: sticky;
-  top: 0;
+  min-height: 0;
+  height: 100%;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
   backdrop-filter: blur(2px);
   overflow-y: auto;
   background-image:
@@ -97,6 +97,34 @@ body {
   letter-spacing: 0.2px;
 }
 .hud-ranking ol { margin: 6px 0 0; padding-left: 22px; font-size: 15px; line-height: 1.45; font-weight: 700; }
+.ranking-table-head,
+.ranking-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 24px;
+  gap: 6px;
+  align-items: center;
+}
+.ranking-table-head {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #9ad9ff;
+  letter-spacing: 0.5px;
+}
+.ranking-table {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.ranking-row {
+  padding: 1px 0;
+}
+.col-level, .col-wins { text-align: center; }
+.col-player {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .ranking-section.monthly {
   border-top: 1px solid rgba(134, 176, 202, 0.35);
   margin-top: 8px;
@@ -115,7 +143,8 @@ body {
 }
 
 .join-tip {
-  margin-top: 10px;
+  margin-top: auto;
+  padding-top: 8px;
   text-align: center;
   font-size: 13px;
   color: #cfe5f5;
