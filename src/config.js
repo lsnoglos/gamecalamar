@@ -52,4 +52,7 @@ export const CONFIG = {
   debug: {
     testDriverUsername: "lsnoglos",
   },
+  admin: {
+    usernames: ["lsnoglos"],
+  },
 };

@@ -1,3 +1,5 @@
+import { createChatRequest, createGiftRequest, createTapRequest, isJoinMessage } from "./GameRequests.js";
+
 export class EventBridge {
   constructor({ onJoinCommand, onGift, onTap, onChatCommand }) {
     this.onJoinCommand = onJoinCommand;
@@ -9,25 +11,20 @@ export class EventBridge {
   connectGlobalBridge() {
     window.LiveGameBridge = {
       receiveGift: (payload) => {
-        const username = payload?.username ?? `user_${Math.floor(Math.random() * 9999)}`;
-        const gift = payload?.gift ?? "rose";
-        this.onGift(username, gift.toLowerCase());
+        const request = createGiftRequest(payload);
+        this.onGift(request);
       },
       receiveChat: (payload) => {
-        const username = payload?.username ?? `user_${Math.floor(Math.random() * 9999)}`;
-        const message = (payload?.message ?? "").trim().toLowerCase();
-        if (message === "jugar") {
-          this.onJoinCommand(username);
+        const request = createChatRequest(payload);
+        if (isJoinMessage(request.message)) {
+          this.onJoinCommand(request);
           return;
         }
-        this.onChatCommand?.(username, message);
+        this.onChatCommand?.(request);
       },
       receiveTap: (payload) => {
-        if (payload?.username) {
-          this.onTap(payload.username);
-          return;
-        }
-        this.onTap();
+        const request = createTapRequest(payload);
+        this.onTap(request);
       },
     };
   }
