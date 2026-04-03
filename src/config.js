@@ -13,6 +13,7 @@ export const CONFIG = {
     finishWindow: 3,
     levelConfig: LEVEL_CONFIG,
     preScanDelayMs: 1000,
+    flashGraceMs: 2000,
     iceBreath: {
       durationMs: 3600,
       pushBackPercent: 0.05,

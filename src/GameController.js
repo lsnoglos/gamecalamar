@@ -184,7 +184,7 @@ export class GameController {
     const delta = now - this.lastFrameAt;
     this.lastFrameAt = now;
     const locked = this.effect && now < this.effect.endsAt;
-    const flashWindowActive = this.doll.state === "turn" && now <= this.dangerGraceEndsAt;
+    const flashWindowActive = this.doll.state === "turn" && now >= this.dangerGraceEndsAt;
     if (locked) {
       this.roundStartAt += delta;
       this.doll.shiftTime(delta);
@@ -211,7 +211,7 @@ export class GameController {
       this.uiManager.triggerTurnFX();
       this.uiManager.announce("¡Se está volteando!", "danger");
       this.uiManager.setContextMessage("¡Se está volteando!");
-      this.dangerGraceEndsAt = now + 500;
+      this.dangerGraceEndsAt = now + CONFIG.game.flashGraceMs;
     }
 
     if (stateEvent === "dangerHold") {
