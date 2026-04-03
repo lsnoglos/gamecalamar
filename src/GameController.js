@@ -7,6 +7,7 @@ import { EventBridge } from "./EventBridge.js";
 import { SoundManager } from "./SoundManager.js";
 import { UIManager } from "./UIManager.js";
 import { ChatSystem } from "./ChatSystem.js";
+import { COMMAND_KEY, NON_ADMIN_ACTION_COOLDOWN_MS, createChatRequest } from "./GameRequests.js";
 
 const USER_POOL = ["NinjaFox", "LunaTap", "PixelRosa", "NeoKoi", "MayaRush", "TicoLive", "RexArcade", "YukiStar"];
 const GUARDS = [
@@ -49,12 +50,14 @@ export class GameController {
     this.activeIceBreath = null;
     this.dangerGraceEndsAt = 0;
     this.missileStrike = null;
+    this.commandCooldowns = new Map();
+    this.adminUsers = new Set((CONFIG.admin?.usernames ?? []).map((name) => name.toLowerCase()));
 
     this.bridge = new EventBridge({
-      onJoinCommand: (username) => this.spawnPlayer(username),
-      onGift: (username, gift) => this.handleGift(username, gift),
-      onTap: (username) => this.handleTap(username),
-      onChatCommand: (username, message) => this.handleChatCommand(username, message),
+      onJoinCommand: (request) => this.spawnPlayer(request?.username),
+      onGift: (request) => this.handleGift(request),
+      onTap: (request) => this.handleTap(request?.username),
+      onChatCommand: (request) => this.handleChatCommand(request),
     });
     this.bridge.connectGlobalBridge();
 
@@ -84,9 +87,12 @@ export class GameController {
     this.chat.sendChatMessage("Nuevo jugador ha entrado al juego");
   }
 
-  handleGift(username, gift) {
+  handleGift(request) {
     this.sounds.enable();
+    const username = request?.username;
+    const gift = request?.gift;
     const normalized = (gift ?? "").toLowerCase();
+    this.#resetCommandCooldown(username);
     if (normalized === "rose" || normalized === "rosa") {
       const p = this.players.addShieldByUsername(username, 1);
       if (p) this.uiManager.announce(`🌹 +1 escudo protector para ${username} (${p.shields})`, "ok");
@@ -96,18 +102,15 @@ export class GameController {
     if (normalized === "gorra" || normalized === "cap" || normalized === "sombrero" || normalized === "hat") this.#massExplosion(username);
   }
 
-  handleChatCommand(username, message) {
-    const normalized = (message ?? "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .trim();
-    if (normalized === "misil a muneca" || normalized === "lanza misil a la muneca") {
-      this.#activateMissileStrike(username);
+  handleChatCommand(request) {
+    const username = request?.username;
+    const commandKey = request?.commandKey;
+    if (commandKey === COMMAND_KEY.MISSILE) {
+      this.#triggerCommandWithRoleLimits(commandKey, username, () => this.#activateMissileStrike(username));
       return;
     }
-    if (normalized === "pon a bailar a la muneca" || normalized === "muneca baila") {
-      this.#activateEffect("dance", 25000, username);
+    if (commandKey === COMMAND_KEY.DANCE) {
+      this.#triggerCommandWithRoleLimits(commandKey, username, () => this.#activateEffect("dance", 25000, username));
     }
   }
 
@@ -166,12 +169,12 @@ export class GameController {
         const trigger = giftBtn.dataset.trigger;
         if (trigger === "chat") {
           const message = giftBtn.dataset.message ?? "";
-          this.handleChatCommand(CONFIG.debug.testDriverUsername, message);
+          this.handleChatCommand(createChatRequest({ username: CONFIG.debug.testDriverUsername, message }));
           this.uiManager.announce(`Mensaje enviado: ${message}`, "ok");
           return;
         }
         const gift = giftBtn.dataset.gift;
-        this.handleGift(CONFIG.debug.testDriverUsername, gift);
+        this.handleGift({ username: CONFIG.debug.testDriverUsername, gift });
         this.uiManager.announce(`Regalo activado: ${gift}`, "ok");
       });
     }
@@ -829,6 +832,59 @@ export class GameController {
       fireTrail: [],
     };
     this.uiManager.announce(`🚀 ${actor} lanzó misil a la muñeca`, "danger");
+  }
+
+  #triggerCommandWithRoleLimits(commandKey, username, activate) {
+    if (!username) return;
+    if (!this.#isAdminUser(username)) {
+      const remainingMs = this.#remainingCooldownMs(username, commandKey);
+      if (remainingMs > 0) {
+        this.uiManager.announce(`⏱️ ${username}, espera ${this.#formatCooldown(remainingMs)} para volver a usar ${this.#commandLabel(commandKey)}`, "neutral");
+        return;
+      }
+      this.#setCooldown(username, commandKey);
+    }
+    activate();
+  }
+
+  #isAdminUser(username) {
+    return this.adminUsers.has((username ?? "").toLowerCase());
+  }
+
+  #cooldownEntryKey(username, commandKey) {
+    return `${(username ?? "").toLowerCase()}::${commandKey}`;
+  }
+
+  #setCooldown(username, commandKey) {
+    this.commandCooldowns.set(this.#cooldownEntryKey(username, commandKey), Date.now() + NON_ADMIN_ACTION_COOLDOWN_MS);
+  }
+
+  #remainingCooldownMs(username, commandKey) {
+    const endsAt = this.commandCooldowns.get(this.#cooldownEntryKey(username, commandKey));
+    if (!endsAt) return 0;
+    return Math.max(0, endsAt - Date.now());
+  }
+
+  #resetCommandCooldown(username) {
+    if (!username) return;
+    for (const commandKey of Object.values(COMMAND_KEY)) {
+      this.commandCooldowns.delete(this.#cooldownEntryKey(username, commandKey));
+    }
+  }
+
+  #commandLabel(commandKey) {
+    if (commandKey === COMMAND_KEY.DANCE) return "baile";
+    if (commandKey === COMMAND_KEY.MISSILE) return "misil";
+    return "acción";
+  }
+
+  #formatCooldown(remainingMs) {
+    const totalMinutes = Math.ceil(remainingMs / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours <= 0) return `${minutes}m`;
+    if (minutes === 0) return `${hours}h`;
+    return `${hours}h ${minutes}m`;
   }
 
   #updateMissileStrike(now) {
