@@ -7,7 +7,7 @@ export class UIManager {
   }
 
   updateHud({ timeLeft, aliveCount, gameState, ranking, monthlyWinners, level }) {
-    this.ui.timeLeft.textContent = Math.ceil(timeLeft).toString();
+    this.ui.timeLeft.textContent = formatTimeDisplay(timeLeft);
     this.ui.aliveCount.textContent = aliveCount.toString();
 
     this.ui.gameState.textContent = gameState === "safe" ? "LUZ VERDE" : "LUZ ROJA";
@@ -94,4 +94,16 @@ export class UIManager {
 function truncateName(name, max = 10) {
   if (name.length <= max) return name;
   return `${name.slice(0, Math.max(3, max - 3))}...`;
+}
+
+function formatTimeDisplay(timeLeft) {
+  const totalSeconds = Math.max(0, Math.ceil(timeLeft));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (seconds === 0 && totalSeconds > 0) {
+    return `${Math.max(0, minutes - 1)}:60`;
+  }
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }

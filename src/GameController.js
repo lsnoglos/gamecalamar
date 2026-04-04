@@ -495,6 +495,31 @@ export class GameController {
     }
 
     const finishY = CONFIG.game.finishLineY;
+    const goalDirtTop = finishY - 86;
+    const goalDirtBottom = finishY - 8;
+    const dirtGradient = ctx.createLinearGradient(0, goalDirtTop, 0, goalDirtBottom);
+    dirtGradient.addColorStop(0, "rgba(146, 111, 74, 0.94)");
+    dirtGradient.addColorStop(1, "rgba(120, 88, 56, 0.96)");
+    ctx.fillStyle = dirtGradient;
+    ctx.fillRect(0, goalDirtTop, this.canvas.width, goalDirtBottom - goalDirtTop);
+    for (let i = 0; i < 20; i += 1) {
+      const stoneX = 18 + i * 27 + Math.sin(i * 1.9) * 6;
+      const stoneY = goalDirtTop + 14 + (i % 6) * 10;
+      const stoneR = 3 + (i % 3);
+      ctx.fillStyle = i % 2 === 0 ? "#91816e" : "#7d6d5d";
+      ctx.beginPath();
+      ctx.ellipse(stoneX, stoneY, stoneR + 2, stoneR, (i % 4) * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let i = 0; i < 11; i += 1) {
+      const patchX = 20 + i * 49;
+      const patchY = goalDirtTop + 8 + (i % 4) * 16;
+      ctx.fillStyle = i % 2 === 0 ? "#7ead5a" : "#6f9a4d";
+      ctx.beginPath();
+      ctx.ellipse(patchX, patchY, 16, 7, 0.08 * (i % 3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.save();
     ctx.shadowColor = "rgba(255, 255, 180, 0.95)";
     ctx.shadowBlur = 16;
@@ -966,19 +991,33 @@ export class GameController {
     ctx.rotate(torsoLean);
 
     ctx.fillStyle = "#f6d9ba";
-    ctx.fillRect(-20, -46, 40, 20);
+    ctx.fillRect(-22, -46, 44, 21);
 
-    ctx.fillStyle = "#f29339";
+    ctx.fillStyle = "#f27f20";
     ctx.beginPath();
-    ctx.moveTo(-44, -26);
-    ctx.lineTo(44, -26);
-    ctx.lineTo(62, 84);
-    ctx.lineTo(-62, 84);
+    ctx.moveTo(-43, -26);
+    ctx.lineTo(43, -26);
+    ctx.lineTo(62, 86);
+    ctx.lineTo(-62, 86);
     ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = "#cf5f10";
+    ctx.lineWidth = 2;
+    ctx.stroke();
 
-    ctx.fillStyle = "#f2cc41";
-    ctx.fillRect(-35, -27, 70, 18);
+    ctx.strokeStyle = "rgba(157, 66, 12, 0.6)";
+    ctx.lineWidth = 2.2;
+    for (const pleatX of [-23, -8, 8, 23]) {
+      ctx.beginPath();
+      ctx.moveTo(pleatX, -18);
+      ctx.lineTo(pleatX + 5, 79);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "#f6dc5c";
+    ctx.fillRect(-36, -28, 72, 20);
+    ctx.fillStyle = "#efe0b5";
+    ctx.fillRect(-15, -52, 30, 7);
 
     ctx.fillStyle = "#f6d9ba";
     ctx.save();
@@ -1006,22 +1045,22 @@ export class GameController {
     ctx.translate(0, -62);
     ctx.rotate(headRotation);
 
-    ctx.fillStyle = "#2d1f1a";
+    ctx.fillStyle = "#111";
     ctx.beginPath();
-    ctx.arc(0, 0, 30, 0, Math.PI * 2);
+    ctx.arc(0, -1, 31, 0, Math.PI * 2);
     ctx.fill();
 
     const drawPigtail = (side) => {
-      const sx = side * 28;
-      ctx.fillStyle = "#161616";
+      const sx = side * 30;
+      ctx.fillStyle = "#0f0f0f";
       ctx.beginPath();
-      ctx.ellipse(sx, -6, 12, 16, side * 0.42, 0, Math.PI * 2);
+      ctx.ellipse(sx, -7, 14, 18, side * 0.42, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.strokeStyle = "#2f2f2f";
-      ctx.lineWidth = 2.3;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.ellipse(sx, -6, 8, 11, side * 0.42, 0, Math.PI * 2);
+      ctx.ellipse(sx, -7, 9, 12, side * 0.42, 0, Math.PI * 2);
       ctx.stroke();
     };
     drawPigtail(-1);
@@ -1266,6 +1305,7 @@ export class GameController {
 
       ctx.save();
       ctx.translate(p.x, p.y + walkBounce);
+      ctx.scale(0.88, 0.88);
       if (shieldBlinking && Math.floor(now / 130) % 2 === 0) {
         ctx.globalAlpha = 0.35;
       }
@@ -1322,7 +1362,7 @@ export class GameController {
 
       ctx.restore();
 
-      ctx.font = "bold 18px sans-serif";
+      ctx.font = "bold 15px sans-serif";
       ctx.textAlign = "center";
       ctx.lineWidth = 4;
       ctx.strokeStyle = "#000";
